@@ -86,7 +86,7 @@
 		
 		// load specified modules
 		this.rpcHandler.loadModules(modules);
-		this.connectedPeer = [];
+		this.connectedPeer = {};
 		this.status = 'virgin_mode'; // default mode
 	};
 	
@@ -327,7 +327,8 @@
 				delete self.connectedPzp[self.sessionId];
 
 				if (self.status === 'peer_mode') {
-					// Let see what to do?
+					// FIXME verify that the following is enough in peer mode
+					self.pzhId     = '';
 					log('INFO', '[PZP -'+self.sessionId+'] PZP in HUBLESS PEER MODE');					
 					
 				} else if (self.status === 'connected') {
@@ -351,10 +352,10 @@
 			if (err.code === 'ECONNREFUSED' || err.code === 'ECONNRESET') {
 				self.pzhId = '';
 				self.sessionId = self.config.details.name;
+				log('INFO', '[PZP -'+self.sessionId+'] PZP in VIRGIN mode');
+				self.connectedApp();
 				self.rpcHandler.setSessionId(self.sessionId);
 				setupMessageHandler(self);
-				self.connectedApp();
-				log('INFO', '[PZP -'+self.sessionId+'] virgin PZP mode');
 				callback('startedPZP');
 			}
 		});

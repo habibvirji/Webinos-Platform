@@ -142,17 +142,17 @@ pzp_server.startServer = function (self, callback) {
 							}
 							var parse = JSON.parse(data2[j]);
 // 							if(parse.type === "prop" && parse.payload.status === 'registerServices') {
-// 								log(self.sessionId, 'INFO', '[PZH -'+ self.sessionId+'] Receiving Webinos Services from PZP...');
+// 								log(self.sessionId, 'INFO', '[PZP -'+ self.sessionId+'] Receiving Webinos Services from PZP...');
 // 								self.rpcHandler.addRemoteServiceObjects(parse.payload.message);
 // 							}
 							// Send findServices information to connected PZP..
 							if(parse.type === "prop" && parse.payload.status === 'findServices') {
-								logs(self.sessionId, 'INFO', '[PZH -'+ self.sessionId+'] Trying to send Webinos Services from this RPC handler to ' + parse.from + '...');
+								logs(self.sessionId, 'INFO', '[PZP -'+ self.sessionId+'] Trying to send Webinos Services from this RPC handler to ' + parse.from + '...');
 								var services = self.rpcHandler.getAllServices(parse.from);
 								var msg = {'type':'prop', 'from':self.sessionId, 'to':parse.from, 'payload':{'status':'foundServices', 'message':services}};
 								msg.payload.id = parse.payload.message.id;
 								self.sendMessage(msg, parse.from);
-								logs(self.sessionId, 'INFO', '[PZH -'+ self.sessionId+'] Sent ' + (services && services.length) || 0 + ' Webinos Services from this RPC handler.');
+								logs(self.sessionId, 'INFO', '[PZP -'+ self.sessionId+'] Sent ' + (services && services.length) || 0 + ' Webinos Services from this RPC handler.');
 							}	
 							else if (parse.type === 'prop' && parse.payload.status === 'pzpDetails') {
 								if(self.connectedPeer[parse.from]) {

@@ -127,7 +127,7 @@
 		 * @function
 		 */
 		var search = function (serviceType, callback, options, filter) {
-			logger.log('INFO: [Discovery] '+"search: searching for ServiceType: " + serviceType.api);
+			logger.log("search: searching for ServiceType: " + serviceType.api);
 			var results = [];
 			var cstar = serviceType.api.indexOf("*");
 			if(cstar !== -1){
@@ -193,14 +193,40 @@
 						}
 						r = r.filter(hasZoneId);
 					}
-
 					// finally return results
 					callback(r);
 				}
 
+				function searchRemoteServices(that) {
+					var callbackId = getNextID(that.rpcHandler.sessionId);
+					// deliver results once timeout kicks in
+					setTimeout(function() {
+						if (that.remoteServicesFoundCallbacks[callbackId]) {
+					 		that.remoteServicesFoundCallbacks[callbackId]([], callbackId, true);
+						}
+					}, options && typeof options.timeout !== 'undefined' ? options.timeout : 120000); // default: 120 secs
+
+					// store callback in map for lookup on returned remote results
+					that.remoteServicesFoundCallbacks[callbackId] = (function(res, refCnt) {
+						return function(remoteServices, cId, ignoreCnt) {
+							function isServiceType(el) {
+								return el.api === serviceType.api ? true : false;
+							}
+							res = res.concat(remoteServices.filter(isServiceType));
+							refCnt -= 1;
+							if (refCnt < 1 || ignoreCnt) {
+								// entity reference counter is zero, got all answers, so continue
+								deliverResults(res);
+								delete that.remoteServicesFoundCallbacks[cId];
+							}
+						}
+					})(results, entityRefCount);
+					that.rpcHandler.parent.sendMessageAll('findServices', {id: callbackId});
+				} // end of searchRemoteServices
+
 				for (var i in this.registry.getRegisteredObjectsMap()) {
 					if (i === serviceType.api) {
-						logger.log('INFO: [Discovery] '+"search: found matching service(s) for ServiceType: " + serviceType.api);
+						logger.log("search: found matching service(s) for ServiceType: " + serviceType.api);
 						results = this.registry.getRegisteredObjectsMap()[i];
 					}
 				}
@@ -212,40 +238,20 @@
 				// reference counter of all entities we expect services back from
 				// Not in peer mode and connected
 				var entityRefCount =  Object.keys(this.rpcHandler.parent.pzp_state.connectedPzp).length + Object.keys(this.rpcHandler.parent.pzp_state.connectedPzh).length;
+
 				// no connection to a PZH & other connected Peers, don't ask for remote services
 				if (!this.rpcHandler.parent || entityRefCount === 0) {
-					deliverResults(results);
-					return;
+					var that = this;
+					this.rpcHandler.parent.hub.retryConnecting(function(status){
+ 						if (!status) { // If it fails deliver result
+							deliverResults(results);
+						} else { // resend service request to connected PZH
+							searchRemoteServices(that);
+						}
+					});
+				}  else {
+					searchRemoteServices(this);
 				}
-
-				var callbackId = getNextID(this.rpcHandler.sessionId);
-				var that = this;
-
-				// deliver results once timeout kicks in
-				setTimeout(function() {
-					if (that.remoteServicesFoundCallbacks[callbackId]) {
-						that.remoteServicesFoundCallbacks[callbackId]([], callbackId, true);
-					}
-				}, options && typeof options.timeout !== 'undefined' ? options.timeout : 120000); // default: 120 secs
-
-				// store callback in map for lookup on returned remote results
-				this.remoteServicesFoundCallbacks[callbackId] = (function(res, refCnt) {
-					return function(remoteServices, cId, ignoreCnt) {
-
-						function isServiceType(el) {
-							return el.api === serviceType.api ? true : false;
-						}
-						res = res.concat(remoteServices.filter(isServiceType));
-						refCnt -= 1;
-
-						if (refCnt < 1 || ignoreCnt) {
-							// entity reference counter is zero, got all answers, so continue
-							deliverResults(res);
-							delete that.remoteServicesFoundCallbacks[cId];
-						}
-					}
-				})(results, entityRefCount);
-				this.rpcHandler.parent.sendMessageAll('findServices', {id: callbackId});
 			}
 		};
 	};
@@ -258,7 +264,7 @@
 	 */
 	Discovery.prototype.addRemoteServiceObjects = function(msg) {
 		var services = msg.services;
-		logger.log('INFO: [Discovery] '+"addRemoteServiceObjects: found " + (services && services.length) || 0 + " services.");
+		logger.log("addRemoteServiceObjects: found " + (services && services.length) || 0 + " services.");
 		this.remoteServiceObjects[msg.from] = services;
 	};
 

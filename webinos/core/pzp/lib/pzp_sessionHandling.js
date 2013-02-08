@@ -38,7 +38,7 @@ var Pzp = function () {
     self.webinos_manager = {}; // Communication with other managers
     self.pzpClient = {};
     self.pzpWebSocket = {};
-    var hub;
+    self.hub = {};
 
 
     // Helper functions
@@ -244,8 +244,8 @@ var Pzp = function () {
 
                         self.webinos_manager = new WebinosManager (self);
                         self.pzpClient = new PzpClient (self);
-                        hub = new ConnectHub (self);
-                        self.enrollPzp = new EnrollPzp (self, hub);
+                        self.hub = new ConnectHub (self);
+                        self.enrollPzp = new EnrollPzp (self);
                         self.pzpWebSocket = new PzpWebSocket (self);
 
                         self.pzpWebSocket.startWebSocketServer (function (status, value) {
@@ -253,7 +253,7 @@ var Pzp = function () {
                                 self.webinos_manager.initializeRPC_Message (); // Initializes RPC
                                 logger.log ("successfully started pzp websocket server ");
                                 if (self.pzp_state.enrolled) {
-                                    hub.connect (function (status, value) {  // connects hub
+                                    self.hub.connect (function (status, value) {  // connects hub
                                         if (status) {
                                             logger.log (value);
                                         } else {
@@ -447,19 +447,6 @@ var ConnectHub = function (_parent) {
     var pzpServer = new PzpServer (_parent);
 
     /**
-     * If PZP fails to connect to PZH, this tries to connect back to PZH
-     */
-    function retryConnecting () {
-        if (_parent.pzp_state.enrolled) {
-            setTimeout (function () {
-                self.connect (function (status) {
-                    logger.log ("retrying to connect back to the PZH " + (status ? "successful" : "failed"));
-                });
-            }, 60000);//increase time limit to suggest when it should retry connecting back to the PZH
-        }
-    }
-
-    /**
      * PZH connected details are stored in this function
      * @param conn - connection object of the tls client
      * @param callback - returns true or false depending on the PZH connected status
@@ -529,7 +516,6 @@ var ConnectHub = function (_parent) {
 
                 pzpClient.on ("end", function () {
                     _parent.cleanUp (pzpClient.id);
-                    retryConnecting ();
                 });
 
                 pzpClient.on ("error", function (err) {
@@ -540,12 +526,24 @@ var ConnectHub = function (_parent) {
                     } else {
                         logger.error (err);
                     }
+                    if (_callback) _callback(false);
                 });
             });
         } catch (err) {
             logger.error ("Connect Hub - general error : " + err);
         }
-    }
+    };
+    /**
+     * If PZP fails to connect to PZH, this tries to connect back to PZH
+     */
+    this.retryConnecting  = function(callback) {
+        if (_parent.pzp_state.enrolled) {
+            self.connect (function (status) {
+                logger.log ("retry to connect back to the PZH " + (status ? "successful" : "failed"));
+                callback(status);
+            });
+        }
+    };
 };
 /**
  * EnrollPZP stores signed certificate information from the PZH and then triggers connectHub function
@@ -555,7 +553,7 @@ var ConnectHub = function (_parent) {
  * @param masterCert - PZH master certificate
  * @param masterCrl  -  PZH master CRL
  */
-var EnrollPzp = function (_parent, hub) {
+var EnrollPzp = function (_parent) {
     var logger = util.webinosLogging (__filename + "_EnrollPzp") || console;
     this.register = function (_from, _clientCert, _masterCert, _masterCrl) {
         logger.log ("PZP ENROLLED AT  " + _from);    // This message come from PZH web server over websocket
@@ -576,7 +574,7 @@ var EnrollPzp = function (_parent, hub) {
 
         _parent.pzp_state.enrolled = true; // Moved from Virgin mode to hub mode
 
-        hub.connect (function (status) {
+        self.hub.connect (function (status) {
             if (status) {
                 logger.log ("successfully connected to the PZH ")
             } else {

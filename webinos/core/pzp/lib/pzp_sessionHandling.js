@@ -574,7 +574,7 @@ var EnrollPzp = function (_parent) {
 
         _parent.pzp_state.enrolled = true; // Moved from Virgin mode to hub mode
 
-        self.hub.connect (function (status) {
+        _parent.hub.connect (function (status) {
             if (status) {
                 logger.log ("successfully connected to the PZH ")
             } else {

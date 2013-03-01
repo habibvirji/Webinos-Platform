@@ -46,7 +46,7 @@ int genRsaKey(const int bits, char * privkey)
     BN_free(bn);
     return err;
   }
-  if (!(err = RSA_generate_key_ex(rsa,bits,bn,NULL))) {
+  if (!(err = RSA_generate_key_ex(rsa ,bits, bn,NULL))) {
     BN_free(bn);
     RSA_free(rsa);
     return err;
@@ -57,12 +57,15 @@ int genRsaKey(const int bits, char * privkey)
     RSA_free(rsa);
     return err;
   }
-  if (!(err = BIO_read(out,privkey,bits) <= 0)) {
+  if (!(err = BIO_read(out, privkey, bits) <= 0)) {
     BIO_free_all(out);
     BN_free(bn);
     RSA_free(rsa);
     return err;
   }
+  BIO_free_all(out);
+  BN_free(bn);
+  RSA_free(rsa);
   return 0;
 }
 
@@ -73,61 +76,26 @@ int createCertificateRequest(char* result, char* keyToCertify, char * country,
   BIO *mem = BIO_new(BIO_s_mem());
   X509_REQ *req=X509_REQ_new();
   X509_NAME *nm = X509_NAME_new();
-  int err=0;
+  unsigned int err=0, len;
+  //const char *
+  char *certSubjList[] = {(char*)"C", (char*)"ST", (char*)"L", (char*)"O", (char*)"OU",
+                          (char*)"CN", (char*)"emailAddress"};
+  char *certValue[]    = {country, state, loc, organisation, organisationUnit, cname, email};
 
-  //fill in details
-  if (strlen(country) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"C",
-      MBSTRING_UTF8, (unsigned char*)country, -1, -1, 0))) {
-      return err;
-    }
-  }
-  if (strlen(state) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"ST",
-      MBSTRING_UTF8, (unsigned char*)state, -1, -1, 0))) {
-      return err;
-    }
-  }
-  if (strlen(loc) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"L",
-      MBSTRING_UTF8, (unsigned char*)loc, -1, -1, 0))) {
-      return err;
-    }
-  }
-  if (strlen(organisation) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"O",
-      MBSTRING_UTF8, (unsigned char*)organisation, -1, -1, 0))) {
-      return err;
-    }
-  }
-
-  if (strlen(organisationUnit) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"OU",
-      MBSTRING_UTF8, (unsigned char*)organisationUnit, -1, -1, 0))) {
-      return err;
-    }
-  }
-
-   // This is mandatory to have, rest are optional
-  if(!(err = X509_NAME_add_entry_by_txt(nm,"CN", MBSTRING_UTF8, 
-      (unsigned char*) cname, -1, -1, 0))) {
-    return err;
-  }
-
-  if (strlen(email) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"emailAddress",MBSTRING_UTF8, 
-      (unsigned char*)email, -1, -1, 0))) {
-      return err;
-    }
+  for (len = 0; len < (sizeof(certSubjList)/sizeof(certSubjList[0])); len++) {
+    if (strlen(certValue[len]) > 0) {
+        if(!(err = X509_NAME_add_entry_by_txt(nm, certSubjList[len],
+          MBSTRING_UTF8, (unsigned char*)certValue[len], -1, -1, 0))) {
+          return err;
+        }
+      }
   }
 
   if(!(err = X509_REQ_set_subject_name(req, nm))) {
     return err;
   }
-
     //Set the public key
   //...convert PEM private key into a BIO
-
   BIO* bmem = BIO_new_mem_buf(keyToCertify, -1);
   if (!bmem) {
     BIO_free(bmem);
@@ -137,36 +105,28 @@ int createCertificateRequest(char* result, char* keyToCertify, char * country,
   // read the private key into an EVP_PKEY structure
   EVP_PKEY* privkey = PEM_read_bio_PrivateKey(bmem, NULL, NULL, NULL);
   if (!privkey) {
-    BIO_free(bmem);
     return -4;
   }
+  BIO_free(bmem);
 
-
-  if(!(err = X509_REQ_set_pubkey(req, privkey)))
-  {
-    BIO_free(bmem);
+  if(!(err = X509_REQ_set_pubkey(req, privkey))) {
     return err;
   }
 
-  if(!(err = X509_REQ_set_version(req,3)))
-  {
-    BIO_free(bmem);
+  if(!(err = X509_REQ_set_version(req,2))) {
     return err;
   }
 
   //write it to PEM format
   if (!(err = PEM_write_bio_X509_REQ(mem, req))) {
     BIO_free(mem);
-    BIO_free(bmem);
     return err;
   }
-
 
   BUF_MEM *bptr;
   BIO_get_mem_ptr(mem, &bptr);
   BIO_read(mem, result, bptr->length);
 
-  BIO_free(bmem);
   BIO_free(mem);
   return 0;
 }
@@ -186,31 +146,27 @@ int getHash(char* filename, char *pointer){
   int j;
 
   // checks file
-  if ((stat(filename, &sb)) == -1)
-  {
+  if ((stat(filename, &sb)) == -1) {
     perror("getHash: stat()");
     return(1);
   };
   len = (sb.st_size * 2);
 
   // allocates memory
-  if (!(buff = (char*)malloc(len)))
-  {
+  if (!(buff = (char*)malloc(len))) {
     fprintf(stderr, "getHash: out of virtual memory\n");
     return(1);
   };
 
   // opens file for reading
-  if ((fd = fopen(filename, "r")) == NULL)
-  {
+  if ((fd = fopen(filename, "r")) == NULL) {
     perror("getHash: open()");
     free(buff);
     return(1);
   };
 
   // reads file
-  if (!fread(buff, 1, len, fd))  
-  {
+  if (!fread(buff, 1, len, fd)) {
     perror("getHash: read()");
     free(buff);
     return(1);
@@ -259,8 +215,7 @@ int getHash(char* filename, char *pointer){
   return(0);
 }
 
-ASN1_INTEGER* getRandomSN()
-{
+ASN1_INTEGER* getRandomSN() {
   ASN1_INTEGER* res = ASN1_INTEGER_new();
   BIGNUM *btmp = BN_new();
   //64 bits of randomness?
@@ -321,7 +276,6 @@ int createCertificate(char *url, int certType, int days, X509* cert, X509_REQ* r
   if(!X509_set_pubkey(cert, reqPub)) {
     return ERR_peek_error();
   }
-
   EVP_PKEY_free(reqPub);
 
   //create a serial number at random
@@ -348,77 +302,51 @@ int createCertificate(char *url, int certType, int days, X509* cert, X509_REQ* r
   }
 
   if( certType == 0) {
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_basic_constraints,
-      (char*)"critical, CA:TRUE"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
+    int certParamType[]  = {NID_basic_constraints,
+                              NID_key_usage,
+                              NID_ext_key_usage,
+                              NID_inhibit_any_policy,
+                              NID_crl_distribution_points};
+    char *certParamValue[] = {(char*)"critical, CA:TRUE",
+                              (char*)"critical, keyCertSign, digitalSignature, cRLSign",
+                              (char*)"critical, serverAuth",
+                              (char*)"0",
+                              (char*)url};
+    for (unsigned int len = 0;
+        len < (sizeof(certParamType)/sizeof(certParamType[0])); len++) {
+      if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, certParamType[len],
+       certParamValue[len]))) {
+        return ERR_peek_error();
+      } else {
+        X509_add_ext(cert, ex, -1);
+      }
     }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_key_usage,
-      (char*)"critical, keyCertSign, digitalSignature, cRLSign"))) {
-      /* critical, keyCertSign,cRLSign, nonRepudiation,*/
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_ext_key_usage,
-      (char*)"critical, serverAuth"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_inhibit_any_policy,
-      (char*)"0"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_crl_distribution_points,
-      (char*)url))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
   } if( certType == 1 || certType == 2) {
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_issuer_alt_name,
-      (char*)"issuer:copy"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    char *str = (char*)malloc(strlen("caIssuers;") + strlen(url) + 1);
-    if (str == NULL) {
-      return -10;
-    }
-    strcpy(str, "caIssuers;");
-    strcat(str, url);
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_info_access, (char*)str))) {
-      free(str);
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-      free(str);
-    }
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_basic_constraints,
-      (char*)"critical, CA:FALSE"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_ext_key_usage,
-      (char*)"critical, clientAuth, serverAuth"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
+     char *str = (char*)malloc(strlen("caIssuers;") + strlen(url) + 1);
+     if (str == NULL) {
+       return -10;
+     }
+     strcpy(str, "caIssuers;");
+     strcat(str, url);
+     int certParamType[]  = {NID_issuer_alt_name,
+                               NID_info_access,
+                               NID_basic_constraints,
+                               NID_ext_key_usage};
+     char *certParamValue[] = {(char*)"issuer:copy",
+                               (char*)str,
+                               (char*)"critical, CA:FALSE",
+                               (char*)"critical, clientAuth, serverAuth"};
+     for (unsigned int len = 0;
+         len < (sizeof(certParamType)/sizeof(certParamType[0])); len++){
+       if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, certParamType[len],
+        certParamValue[len]))) {
+         free(str);
+         return ERR_peek_error();
+       } else {
+         X509_add_ext(cert, ex, -1);
+       }
+     }
+     free(str);
   }
   return 0;
 }
@@ -495,7 +423,7 @@ int signRequest(char* pemRequest, int days, char* pemCAKey, char* pemCaCert,
     return err;
   }
 
-  writeCert(cert, result    );
+  writeCert(cert, result);
   return 0;
 }
 
@@ -546,14 +474,11 @@ int createEmptyCRL(char* pemSigningKey, char* pemCaCert, int crldays,
   X509_CRL_sort(crl);
 
   //extensions would go here.
-
-  if (!(err = X509_CRL_sign(crl,caKey,EVP_sha1())))
-  {
+  if (!(err = X509_CRL_sign(crl,caKey,EVP_sha1()))) {
     BIO_free(bioCert);
     BIO_free(bioSigningKey);
     return err;
   }
-
 
   BIO *mem = BIO_new(BIO_s_mem());
   PEM_write_bio_X509_CRL(mem,crl);
@@ -652,3 +577,7 @@ int addToCRL(char* pemSigningKey, char* pemOldCrl, char* pemRevokedCert,
   return 0;
 }
 
+
+parseCertificate() {
+
+}

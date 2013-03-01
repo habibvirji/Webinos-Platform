@@ -196,7 +196,7 @@ v8::Handle<Value> _createEmptyCRL(const Arguments& args)
     char *pem=(char *)calloc(BUFFER_SIZE+1, sizeof(char)); /* Null-terminate */
     int res = 0;
     res = ::createEmptyCRL(pemKey.operator*(), pemCert.operator*(), days,hours,pem);
-  if (res != 0) {
+    if (res != 0) {
         return ThrowException(Exception::TypeError(String::New("Failed to create empty CRL")));
     }
     
@@ -221,14 +221,12 @@ v8::Handle<Value> _addToCRL(const Arguments& args)
     String::Utf8Value pemKey(args[0]->ToString());
     String::Utf8Value pemOldCRL(args[1]->ToString());
     String::Utf8Value pemRevokedCert(args[2]->ToString());
-    
           
     //call the wrapper & check for errors
     char *pem=(char *)calloc(BUFFER_SIZE+1, sizeof(char)); /* Null-terminate */
     int res = 0;
     res = ::addToCRL(pemKey.operator*(), pemOldCRL.operator*(), pemRevokedCert.operator*(),pem);
-  if (res != 0) {
-
+    if (res != 0) {
         return ThrowException(Exception::TypeError(String::New("Failed to add a certificate to the CRL")));
     }
     
@@ -269,6 +267,29 @@ v8::Handle<Value> _getHash(const Arguments& args)
   }
 }
 
+v8::Handle<Value> _parseCertificate(const Arguments& args)
+{
+  HandleScope scope;
+  if ((args.Length() == 1) && args[0]->IsString()) {
+    String::Utf8Value certPemFile(args[0]->ToString());
+    int res = 0;
+    res = ::createEmptyCRL();
+    if (res != 0) {
+        return ThrowException(Exception::TypeError(String::New("Failed to create empty CRL")));
+    }
+
+    //create composite remote object
+    Local<String> result = String::New(pem);
+    free(pem);
+    return scope.Close(result);
+
+    return scope.Close(result);
+  }
+  else {
+    return ThrowException(Exception::TypeError(String::New("Certificate expected")));
+  }
+}
+
 extern "C" {
   static void init(v8::Handle<Object> target)
   {
@@ -279,6 +300,8 @@ extern "C" {
     NODE_SET_METHOD(target,"createEmptyCRL",_createEmptyCRL);
     NODE_SET_METHOD(target,"addToCRL",_addToCRL);
     NODE_SET_METHOD(target,"getHash",_getHash);
+    NODE_SET_METHOD(target,"parseCertificate",_parseCertificate);
+    NODE_SET_METHOD(target,"validateCertificatePath",_validateCertificatePath);
   }
   NODE_MODULE(certificate_manager,init);
 }

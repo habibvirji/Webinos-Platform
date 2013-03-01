@@ -19,11 +19,7 @@
 var cacert = 0;
 var pzpcert = 2;
 
-var certman = null;
-if (process.platform != 'android')
-  certman = require("../src/build/Release/certificate_manager");
-else
-  certman = require('certificate_manager');
+var certman = require('certificate_manager');
 
 var debug = true;
 var caKey = null;

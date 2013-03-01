@@ -66,7 +66,9 @@ int genRsaKey(const int bits, char * privkey)
   return 0;
 }
 
-int createCertificateRequest(char* result, char* keyToCertify, char * country, char* state, char* loc, char* organisation, char *organisationUnit, char* cname, char* email)
+int createCertificateRequest(char* result, char* keyToCertify, char * country, 
+                             char* state, char* loc, char* organisation, 
+                             char *organisationUnit, char* cname, char* email)
 {
   BIO *mem = BIO_new(BIO_s_mem());
   X509_REQ *req=X509_REQ_new();
@@ -107,12 +109,14 @@ int createCertificateRequest(char* result, char* keyToCertify, char * country, c
   }
 
    // This is mandatory to have, rest are optional
-  if(!(err = X509_NAME_add_entry_by_txt(nm,"CN", MBSTRING_UTF8, (unsigned char*) cname, -1, -1, 0))) {
+  if(!(err = X509_NAME_add_entry_by_txt(nm,"CN", MBSTRING_UTF8, 
+      (unsigned char*) cname, -1, -1, 0))) {
     return err;
   }
 
   if (strlen(email) > 0) {
-    if(!(err = X509_NAME_add_entry_by_txt(nm,"emailAddress",MBSTRING_UTF8, (unsigned char*)email, -1, -1, 0))) {
+    if(!(err = X509_NAME_add_entry_by_txt(nm,"emailAddress",MBSTRING_UTF8, 
+      (unsigned char*)email, -1, -1, 0))) {
       return err;
     }
   }
@@ -267,81 +271,58 @@ ASN1_INTEGER* getRandomSN()
   return res;
 }
 
-
-int selfSignRequest(char* pemRequest, int days, char* pemCAKey, int certType, char *url, char* result)  {
-  BIO* bioReq = BIO_new_mem_buf(pemRequest, -1);
-  BIO* bioCAKey = BIO_new_mem_buf(pemCAKey, -1);
-
-  int err = 0;
-
-  X509_REQ *req=NULL;
-  if (!(req=PEM_read_bio_X509_REQ(bioReq, NULL, NULL, NULL))) {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return -5;
+unsigned long error(BIO* csr, BIO* key, BIO* caCert) {
+  BIO_free(csr);
+  BIO_free(key);
+  if (caCert != NULL){
+    BIO_free(caCert);
   }
+  return ERR_peek_error();
+}
 
-  EVP_PKEY* caKey = PEM_read_bio_PrivateKey(bioCAKey, NULL, NULL, NULL);
-  if (!caKey) {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return -6;
-  }
-
-  X509* cert = X509_new();
+int createCertificate(char *url, int certType, int days, X509* cert, X509_REQ* req, X509 *caCert) {
   EVP_PKEY* reqPub;
-
-  //redo all the certificate details, because OpenSSL wants us to work hard
-  if(!(err =  X509_set_version(cert, 2)))
-  {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return err;
+  if(!(X509_set_version(cert, 2))) {
+    return ERR_peek_error();
   }
-
-  if(!(err = X509_set_issuer_name(cert, X509_REQ_get_subject_name(req))))
-  {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return err;
+  // cacert
+  if (caCert != NULL) {
+    if(!(X509_set_issuer_name(cert, X509_get_subject_name(caCert)))) {
+      return ERR_peek_error();
+    }
+  } else {
+    if(!(X509_set_issuer_name(cert, X509_REQ_get_subject_name(req)))) {
+      return ERR_peek_error();
+    }
   }
-
   ASN1_UTCTIME *s=ASN1_UTCTIME_new();
   // Jira-issue: WP-37
   // This is temp solution for putting pzp validity 5 minutes before current time
-  // If there is a small clock difference between machines, it results in cert_not_yet_valid
+  // If there is a small clock difference between machines,
+  // it results in cert_not_yet_valid
   // It does set GMT time but is relevant to machine time.
   // A better solution would be to have ntp server contacted to get proper time.
-  if(certType == 2) {
+  if(certType == 2|| certType == 1) {
     X509_gmtime_adj(s, long(0-300));
-  }
-  else {
+  } else {
     X509_gmtime_adj(s, long(0));
-  }
-  // End of WP-37
+  }// End of WP-37
   X509_set_notBefore(cert, s);
-
   X509_gmtime_adj(s, (long)60*60*24*days);
   X509_set_notAfter(cert, s);
-
   ASN1_UTCTIME_free(s);
 
-  if(!(err = X509_set_subject_name(cert, X509_REQ_get_subject_name(req)))) {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return err;
+  if(!(X509_set_subject_name(cert, X509_REQ_get_subject_name(req)))) {
+    return ERR_peek_error();
+  }
+  if (!(reqPub = X509_REQ_get_pubkey(req))) {
+    return ERR_peek_error();
+  }
+  if(!X509_set_pubkey(cert, reqPub)) {
+    return ERR_peek_error();
   }
 
-  if (!(reqPub = X509_REQ_get_pubkey(req))) {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return -7;
-  }
-  err = X509_set_pubkey(cert,reqPub);
   EVP_PKEY_free(reqPub);
-  if (!err) {
-    return err; // an error occurred, this is terrible style.
-  }
 
   //create a serial number at random
   ASN1_INTEGER* serial = getRandomSN();
@@ -353,224 +334,173 @@ int selfSignRequest(char* pemRequest, int days, char* pemCAKey, int certType, ch
   X509V3_set_ctx_nodb(&ctx);
   X509V3_set_ctx(&ctx, cert, cert, NULL, NULL, 0);
 
-  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_alt_name, (char*)url))) {
+  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_alt_name, (char*)url))){
     return ERR_peek_error();
   } else {
     X509_add_ext(cert, ex, -1);
   }
 
-  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_key_identifier, (char*)"hash"))) {
+  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_key_identifier,
+    (char*)"hash"))) {
     return ERR_peek_error();
   } else {
     X509_add_ext(cert, ex, -1);
   }
 
   if( certType == 0) {
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_basic_constraints, (char*)"critical, CA:TRUE"))) {
+    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_basic_constraints,
+      (char*)"critical, CA:TRUE"))) {
       return ERR_peek_error();
     } else {
       X509_add_ext(cert, ex, -1);
     }
 
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_key_usage, (char*)"critical, keyCertSign, digitalSignature, cRLSign"))) { /* critical, keyCertSign,cRLSign, nonRepudiation,*/
+    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_key_usage,
+      (char*)"critical, keyCertSign, digitalSignature, cRLSign"))) {
+      /* critical, keyCertSign,cRLSign, nonRepudiation,*/
       return ERR_peek_error();
     } else {
       X509_add_ext(cert, ex, -1);
     }
 
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_ext_key_usage, (char*)"critical, serverAuth"))) {
+    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_ext_key_usage,
+      (char*)"critical, serverAuth"))) {
       return ERR_peek_error();
     } else {
       X509_add_ext(cert, ex, -1);
     }
 
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_inhibit_any_policy, (char*)"0"))) {
+    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_inhibit_any_policy,
+      (char*)"0"))) {
       return ERR_peek_error();
     } else {
       X509_add_ext(cert, ex, -1);
     }
 
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_crl_distribution_points, (char*)url))) {
+    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_crl_distribution_points,
+      (char*)url))) {
+      return ERR_peek_error();
+    } else {
+      X509_add_ext(cert, ex, -1);
+    }
+
+  } if( certType == 1 || certType == 2) {
+    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_issuer_alt_name,
+      (char*)"issuer:copy"))) {
+      return ERR_peek_error();
+    } else {
+      X509_add_ext(cert, ex, -1);
+    }
+
+    char *str = (char*)malloc(strlen("caIssuers;") + strlen(url) + 1);
+    if (str == NULL) {
+      return -10;
+    }
+    strcpy(str, "caIssuers;");
+    strcat(str, url);
+
+    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_info_access, (char*)str))) {
+      free(str);
+      return ERR_peek_error();
+    } else {
+      X509_add_ext(cert, ex, -1);
+      free(str);
+    }
+    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_basic_constraints,
+      (char*)"critical, CA:FALSE"))) {
+      return ERR_peek_error();
+    } else {
+      X509_add_ext(cert, ex, -1);
+    }
+
+    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_ext_key_usage,
+      (char*)"critical, clientAuth, serverAuth"))) {
       return ERR_peek_error();
     } else {
       X509_add_ext(cert, ex, -1);
     }
   }
-
-  if (!(err = X509_sign(cert,caKey,EVP_sha1()))) {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return err;
-  }
-
-  BIO *mem = BIO_new(BIO_s_mem());
-  PEM_write_bio_X509(mem,cert);
-
-  BUF_MEM *bptr;
-  BIO_get_mem_ptr(mem, &bptr);
-  BIO_read(mem, result, bptr->length);
-
-  BIO_free(mem);
-  BIO_free(bioReq);
-  BIO_free(bioCAKey);
   return 0;
-
 }
 
-int signRequest(char* pemRequest, int days, char* pemCAKey, char* pemCaCert,  int certType, char *url, char* result)  {
+void writeCert(X509* cert, char *result) {
+  BIO *mem = BIO_new(BIO_s_mem());
+  BUF_MEM *bptr;
+  PEM_write_bio_X509(mem, cert);
+  BIO_get_mem_ptr(mem, &bptr);
+  BIO_read(mem, result, bptr->length);
+  BIO_free(mem);
+}
 
+int selfSignRequest(char* pemRequest, int days, char* pemCAKey, int certType, 
+                    char *url, char* result)  {
   BIO* bioReq = BIO_new_mem_buf(pemRequest, -1);
   BIO* bioCAKey = BIO_new_mem_buf(pemCAKey, -1);
+  X509_REQ* req = NULL;
+  EVP_PKEY* caKey;
+  int err;
 
-  BIO* bioCert = BIO_new_mem_buf(pemCaCert, -1);
-  X509* caCert = PEM_read_bio_X509(bioCert, NULL, NULL, NULL);
-
-  int err = 0;
-
-  X509_REQ *req=NULL;
-  if (!(req=PEM_read_bio_X509_REQ(bioReq, NULL, NULL, NULL))) {
-    BIO_free(bioReq);
-    BIO_free(bioCert);
-    BIO_free(bioCAKey);
-    return ERR_peek_error();
+  if (!(req = PEM_read_bio_X509_REQ(bioReq, NULL, NULL, NULL))) {
+    return error(bioReq, bioCAKey, NULL);
   }
 
-  EVP_PKEY* caKey = PEM_read_bio_PrivateKey(bioCAKey, NULL, NULL, NULL);
-  if (!caKey) {
-    BIO_free(bioReq);
-    BIO_free(bioCert);
-    BIO_free(bioCAKey);
-    return ERR_peek_error();
+  if (!(caKey = PEM_read_bio_PrivateKey(bioCAKey, NULL, NULL, NULL))) {
+    return error(bioReq, bioCAKey, NULL);
   }
+
+  BIO_free(bioReq);
+  BIO_free(bioCAKey);
 
   X509* cert = X509_new();
-  EVP_PKEY* reqPub;
-  if(!(err =  X509_set_version(cert, 2)))
-  {
-    BIO_free(bioReq);
-    BIO_free(bioCAKey);
-    return ERR_peek_error();
+  if ((err = createCertificate(url, certType, days, cert, req, NULL)) != 0) {
+    return err;
   }
-
-  //redo all the certificate details, because OpenSSL wants us to work hard
-  X509_set_issuer_name(cert, X509_get_subject_name(caCert));
-
-  ASN1_UTCTIME *s=ASN1_UTCTIME_new();
-
-  // Jira-issue: WP-37
-  // This is temp solution for putting pzp validity 5 minutes before current time
-  // If there is a small clock difference between machines, it results in cert_not_yet_valid
-  // It does set GMT time but is relevant to machine time.
-  // A better solution would be to have ntp server contacted to get a proper time.
-  if(certType == 2) {
-    X509_gmtime_adj(s, long(0-300));
-  }
-  else {
-    X509_gmtime_adj(s, long(0));
-  }
-  // End of WP-37
-  X509_set_notBefore(cert, s);
-
-  X509_gmtime_adj(s, (long)60*60*24*days);
-  X509_set_notAfter(cert, s);
-
-  ASN1_UTCTIME_free(s);
-
-  X509_set_subject_name(cert, X509_REQ_get_subject_name(req));
-  reqPub = X509_REQ_get_pubkey(req);
-  X509_set_pubkey(cert,reqPub);
-  EVP_PKEY_free(reqPub);
-
-  //create a serial number at random
-  ASN1_INTEGER* serial = getRandomSN();
-  X509_set_serialNumber(cert, serial);
-
-  X509_EXTENSION *ex;
-  X509V3_CTX ctx;
-  X509V3_set_ctx_nodb(&ctx);
-  X509V3_set_ctx(&ctx, cert, cert, NULL, NULL, 0);
-
-  char *str = (char*)malloc(strlen("caIssuers;") + strlen(url) + 1);
-  if (str == NULL) {
-    return -10;
-  }
-  strcpy(str, "caIssuers;");
-  strcat(str, url);
-
-  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_info_access, (char*)str))) {
-    free(str);
-    return ERR_peek_error();
-  } else {
-    X509_add_ext(cert, ex, -1);
-  }
-  free(str);
-  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_alt_name, (char*)url))) {
-    return ERR_peek_error();
-  } else {
-    X509_add_ext(cert, ex, -1);
-  }
-  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_issuer_alt_name, (char*)"issuer:copy"))) {
-    return ERR_peek_error();
-  } else {
-    X509_add_ext(cert, ex, -1);
-  }
-
-  if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_subject_key_identifier, (char*)"hash"))) {
-    return ERR_peek_error();
-  } else {
-    X509_add_ext(cert, ex, -1);
-  }
-
-  if( certType == 1) {
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_basic_constraints, (char*)"critical, CA:FALSE"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL,  &ctx, NID_ext_key_usage, (char*)"critical, clientAuth, serverAuth"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-  } else if( certType == 2) {
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_basic_constraints, (char*)"critical, CA:FALSE"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-
-    if(!(ex = X509V3_EXT_conf_nid(NULL, &ctx, NID_ext_key_usage, (char*)"critical, clientAuth, serverAuth"))) {
-      return ERR_peek_error();
-    } else {
-      X509_add_ext(cert, ex, -1);
-    }
-  }
-
-  if (!(err = X509_sign(cert,caKey,EVP_sha1())))
-  {
-    BIO_free(bioReq);
-    BIO_free(bioCert);
-    BIO_free(bioCAKey);
+  if (!(err = X509_sign(cert, caKey, EVP_sha1()))) {
     return err;
   }
 
-  BIO *mem = BIO_new(BIO_s_mem());
-  PEM_write_bio_X509(mem,cert);
-
-  BUF_MEM *bptr;
-  BIO_get_mem_ptr(mem, &bptr);
-  BIO_read(mem, result, bptr->length);
-
-  BIO_free(mem);
-  BIO_free(bioReq);
-  BIO_free(bioCert);
-  BIO_free(bioCAKey);
-
+  writeCert(cert, result);
   return 0;
 }
 
-int createEmptyCRL(char* pemSigningKey, char* pemCaCert, int crldays, int crlhours, char* result) {
+int signRequest(char* pemRequest, int days, char* pemCAKey, char* pemCaCert,
+                int certType, char *url, char* result)  {
+  BIO *bioReq, *bioCAKey, *bioCert;
+  X509 *caCert, *cert;
+  int err;
+  X509_REQ *req = NULL;
+  EVP_PKEY *caKey;
+  bioReq = BIO_new_mem_buf(pemRequest, -1);
+  bioCAKey = BIO_new_mem_buf(pemCAKey, -1);
+  bioCert = BIO_new_mem_buf(pemCaCert, -1);
+
+  if (!(req=PEM_read_bio_X509_REQ(bioReq, NULL, NULL, NULL))) {
+    return error(bioReq, bioCAKey, bioCert);
+  }
+  if (!(caKey= PEM_read_bio_PrivateKey(bioCAKey, NULL, NULL, NULL))) {
+    return error(bioReq, bioCAKey, bioCert);
+  }
+  if (!(caCert = PEM_read_bio_X509(bioCert, NULL, NULL, NULL))) {
+    return error(bioReq, bioCAKey, bioCert);
+  }
+  BIO_free(bioReq);
+  BIO_free(bioCAKey);
+  BIO_free(bioCert);
+
+  cert = X509_new();
+  if ((err = createCertificate(url, certType, days, cert, req, caCert)) != 0) {
+    return err;
+  }
+  if (!(err = X509_sign(cert, caKey, EVP_sha1()))) {
+    return err;
+  }
+
+  writeCert(cert, result    );
+  return 0;
+}
+
+int createEmptyCRL(char* pemSigningKey, char* pemCaCert, int crldays,
+                   int crlhours, char* result) {
   int err = 0;
 
   //convert to BIOs and then keys and x509 structures
@@ -639,7 +569,8 @@ int createEmptyCRL(char* pemSigningKey, char* pemCaCert, int crldays, int crlhou
 }
 
 
-int addToCRL(char* pemSigningKey, char* pemOldCrl, char* pemRevokedCert, char* result) {
+int addToCRL(char* pemSigningKey, char* pemOldCrl, char* pemRevokedCert, 
+             char* result) {
   int err = 0;
 
   BIO* bioSigningKey = BIO_new_mem_buf(pemSigningKey, -1);
@@ -712,7 +643,6 @@ int addToCRL(char* pemSigningKey, char* pemOldCrl, char* pemRevokedCert, char* r
   BUF_MEM *bptr;
   BIO_get_mem_ptr(mem, &bptr);
   BIO_read(mem, result, bptr->length);
-
 
   BIO_free(bioRevCert);
   BIO_free(bioSigningKey);

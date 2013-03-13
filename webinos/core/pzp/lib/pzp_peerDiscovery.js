@@ -16,12 +16,16 @@
  * Copyright 2011 Ziran Sun, Samsung Electronics (UK) Ltd
  *******************************************************************************/
 
-var webinos = require("find-dependencies")(__dirname);
-var logger  = webinos.global.require(webinos.global.util.location, "lib/logging.js")(__filename) || console;
-var localconnectionManager = webinos.global.require(webinos.global.manager.localconnection_manager.location, "/lib/localconnectionmanager").localconnectionManager;
-
-var PzpPeerDiscovery = function(_parent){
-  this.localconnectionManager = new localconnectionManager();
+var PzpSIB = require("./pzp_SIB_auth.js");
+var PzpPeerDiscovery = function(){
+    PzpSIB.call(this);
+    var PzpCommon = require("./pzp.js");
+    this.discoveredPzp=[], // Store Discovered PZP details
+    this.networkAddr = "";
+    this.connectingPeerAddr = "";
+    var logger  = PzpCommon.wUtil.webinosLogging(__filename) || console;
+    var localConnectionManager = require("../../manager/localconnection_manager/lib/localconnectionmanager.js");
+    this.localConnectionManager = new localConnectionManager.localconnectionManager();
 
   /**
    * Advertise PZP with service type "pzp". 
@@ -29,9 +33,8 @@ var PzpPeerDiscovery = function(_parent){
    * @param port. Port for advertisement. Use 4321 if not configured
    */
   this.advertPzp = function(discoveryMethod, port) {
-    if(typeof port == "undefined")
-      port = 4321;
-    this.localconnectionManager.advertPeers('pzp', discoveryMethod, port);
+    if(!port) port = 4321;
+    this.localConnectionManager.advertPeers('pzp', discoveryMethod, port);
   };  
 
   /**
@@ -43,7 +46,7 @@ var PzpPeerDiscovery = function(_parent){
    * @param callback. 
    */
   this.findPzp = function(parent, discoveryMethod, tlsServerPort, options, callback){
-    this.localconnectionManager.findPeers('pzp', discoveryMethod, tlsServerPort, options, function(msg){
+    this.localConnectionManager.findPeers('pzp', discoveryMethod, tlsServerPort, options, function(msg){
       _parent.pzp_state.discoveredPzp[msg.name] = msg;
       logger.log("parent.pzp_state.discoveredPzp[" + msg.name + "]");
       logger.log(msg);
@@ -56,7 +59,7 @@ var PzpPeerDiscovery = function(_parent){
            
       if(parent.pzp_state.sessionId.indexOf(pzpname) != -1)
       {
-        logger.log(parent.pzp_state.sessionId);
+        logger.log(parent.getSessionId());
         parent.pzp_state.networkAddr = msg.address;  //store  own network address for later use
         logger.log("own address: " + parent.pzp_state.networkAddr);
       }
@@ -74,4 +77,5 @@ var PzpPeerDiscovery = function(_parent){
   }; 
   
 };
+require("util").inherits(PzpPeerDiscovery, PzpSIB);
 module.exports = PzpPeerDiscovery;

@@ -1,53 +1,52 @@
-    /*******************************************************************************
- *  Code contributed to the webinos project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * Copyright 2012 - 2013 Samsung Electronics (UK) Ltd
- * Author: Habib Virji (habib.virji@samsung.com)
- *         Ziran Sun (ziran.sun@samsung.com)
- *******************************************************************************/
-var path = require ("path");
-var fs = require ("fs");
-var os = require ("os");
-var util = require ("util");
-
+/*******************************************************************************
+*  Code contributed to the webinos project
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+* Copyright 2012 - 2013 Samsung Electronics (UK) Ltd
+* Author: Habib Virji (habib.virji@samsung.com)
+*         Ziran Sun (ziran.sun@samsung.com)
+*******************************************************************************/
 var dependency = require ("find-dependencies") (__dirname);
-var logger = require("./logging.js") (__filename) || console;
-var wPath = require("./webinosPath.js");
 var certificate = dependency.global.require (dependency.global.manager.certificate_manager.location);
 
 /**
  *
  * @constructor
  */
-function Config () {
+function Config() {
     "use strict";
+    var path = require ("path");
+    var fs = require ("fs");
+    var os = require ("os");
+    var util = require ("util");
+    var logger = require("./logging.js") (__filename) || console;
+    var wPath = require("./webinosPath.js");
+
     var self = this;
-    certificate.call (self);
-    self.metaData = {};
-    self.trustedList = {pzh:{}, pzp:{}};
-    self.untrustedCert = {};
-    self.exCertList    = {};
-    self.crl = {};
-    self.policies = {};//todo: integrate policy in the configuration
-    self.userData = {};
-    self.userPref = {};
-    self.serviceCache = [];
+    certificate.call(self);
+    self.metaData={};
+    self.trustedList={pzh:{}, pzp:{}};
+    self.untrustedCert={};
+    self.exCertList={};
+    self.crl={};
+    self.policies={};
+    self.userData={};
+    self.userPref={};
+    self.serviceCache=[];
     var existsSync = fs.existsSync || path.existsSync;
 
     self.fileList = [{folderName: null, fileName: "metaData", object: self.metaData},
-
         {folderName: null, fileName: "crl", object: self.crl},
         {folderName: null, fileName:"trustedList", object: self.trustedList},
         {folderName: null, fileName:"untrustedList", object: self.untrustedCert},
@@ -58,6 +57,29 @@ function Config () {
         {folderName:"userData", fileName:"serviceCache", object: self.serviceCache},
         {folderName:"userData", fileName:"userPref", object: self.userPref}];
 
+    /**
+     * Helper function to store first time configuration details.
+     */
+    function storeAll() {
+        self.fileList.forEach (function (name) {
+            if (typeof name === "object") {
+                if(name.folderName === "userData") {
+                    if (name.fileName === "userDetails") {
+                        name.object = self.userData;
+                    }
+                    if (name.fileName === "serviceCache") {
+                        name.object = self.serviceCache;
+                    }
+                }
+                self.storeDetails(name.folderName, name.fileName, name.object);
+            }
+        });
+    }
+
+    /**
+     * Sets friendly name of the PZP.
+     * @param [friendlyName=undefined] - Friendly if set via command line or via webinos_config.json
+     */
     function setFriendlyName(friendlyName) {
         if(friendlyName) {
             self.metaData.friendlyName = friendlyName;
@@ -76,6 +98,12 @@ function Config () {
         }
     }
 
+    /**
+     * Helper function to compare two objects
+     * @param objA - Object 1 to compare
+     * @param objB - Object 2 to compare
+     * @return {Boolean} true if both objects are equal or else false
+     */
     function compareObjects(objA, objB){
         if (typeof objA !== "object" || typeof objB !== "object") {
             return false;
@@ -94,32 +122,41 @@ function Config () {
         return true;// both objects are equal
     }
 
-    function updateWebinosConfig(folderName, type) {
-        function writeFile(config) {
+    /**
+     * Updates webinos config regarding service cache and user ports
+     * @param folderName - folder name of the file that was updated
+     * @param fileName -
+     */
+    function updateWebinosConfig(fileName) {
+        function writeFile(fileName, config) {
             var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
             fs.writeFileSync(filePath, JSON.stringify(config, null, "  "));
-            logger.log("updated webinos config ");
+            logger.log("updated webinos config with details related to "+ fileName);
         }
 
-        if (folderName === "userData") {
-            var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
-            var config = require(filePath);
-            if (type === "serviceCache") {
-               if (self.metaData.webinosType === "Pzh" &&
-                   config.pzhDefaultServices.length !== self.serviceCache.length) {
-                   config.pzhDefaultServices = self.serviceCache;
-               } else if (self.metaData.webinosType === "Pzp" &&
-                          config.pzpDefaultServices.length !== self.serviceCache.length) {
-                   config.pzpDefaultServices = self.serviceCache;
-               }
-               writeFile(config);
-            } else if (type === "userPref" && !compareObjects(config.ports, self.userPref.ports)) {
-                config.ports = self.userPref.ports;
-                writeFile(config);
-            }
+        var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
+        var config = require(filePath);
+        if (fileName === "serviceCache") {
+           if (self.metaData.webinosType === "Pzh" &&
+               config.pzhDefaultServices.length !== self.serviceCache.length) {
+               config.pzhDefaultServices = self.serviceCache;
+           } else if (self.metaData.webinosType === "Pzp" &&
+                      config.pzpDefaultServices.length !== self.serviceCache.length) {
+               config.pzpDefaultServices = self.serviceCache;
+           }
+           writeFile(fileName, config);
+        } else if (fileName === "userPref" && !compareObjects(config.ports, self.userPref.ports)) {
+            config.ports = self.userPref.ports;
+            writeFile(fileName, config);
         }
+
     }
 
+    /**
+     * Reads webinos_config values every time PZP is restarted.
+     * This can reset values based on webinos_config,json for ports, webinos_version and serviceCache
+     * @param webinosType - Defines type of the Device PZH or PZP
+     */
     function checkDefaultValues(webinosType) {
         var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
         var config = require(filePath), key;
@@ -143,9 +180,12 @@ function Config () {
         }
     }
 
+    /**
+     *
+     */
     function createPolicyFile() {
         // policy file
-        fs.readFile (path.join (self.metaData.webinosRoot, "policies", "policy.xml"), function (err) {
+        fs.readFile(path.join (self.metaData.webinosRoot, "policies", "policy.xml"), function (err) {
             if (err && err.code === "ENOENT") {
                 var data;
                 try {
@@ -155,63 +195,56 @@ function Config () {
                     logger.error ("Default policy not found");
                     data = "<policy combine=\"first-applicable\" description=\"denyall\">\n<rule effect=\"deny\"></rule>\n</policy>";
                 }
-                fs.writeFileSync (path.join (self.metaData.webinosRoot, "policies", "policy.xml"), data);
+                fs.writeFileSync(path.join (self.metaData.webinosRoot, "policies", "policy.xml"), data);
             }
         });
     }
 
-
-    function storeAll() {
-        self.fileList.forEach (function (name) {
-            if (typeof name === "object") {
-                if(name.folderName === "userData") {
-                    if (name.fileName === "userDetails") {
-                        name.object = self.userData;
-                    }
-                    if (name.fileName === "serviceCache") {
-                        name.object = self.serviceCache;
-                    }
-                }
-                self.storeDetails(name.folderName, name.fileName, name.object);
-            }
-        });
-    }
-
-
-
-    function checkConfigExists(webinosType, inputConfig, callback) {
-        var name, i;
-        require("./webinosId.js").fetchDeviceName(webinosType, inputConfig, function (webinosName) {
-            var webinos_root =  (webinosType.search("Pzh") !== -1)? wPath.webinosPath()+"Pzh" :wPath.webinosPath();
-            self.metaData.webinosRoot = (webinosType.search("Pzh") !== -1)? (webinos_root + "/" + webinosName): webinos_root;
-            for (i = 0; i < self.fileList.length; i = i + 1) {
-                name = self.fileList[i];
-                var fileName = (name.fileName !== null) ? (name.fileName+".json"):(webinosName +".json");
-                var filePath = path.join (self.metaData.webinosRoot, name.folderName, fileName);
-                if( !existsSync(filePath)){
-                    return callback(false);
-                }
-            }
-            return callback(true);
-        });
-
-    }
     /**
-     *
-     * @param callback
+     * Checks whether webinos configuration exists or else a new configuration is needed to be loaded
+     * @param webinosType - Type of the device - Pzh/Pzp/PzhP
+     * @param inputConfig - These are the command line arguments
+     * @param callback - Returns true if configuration exists or false if configuration does not exists or if exception occurs.
+     */
+    function checkConfigExists(webinosType, inputConfig, callback) {
+        try {
+            require("./webinosId.js").fetchDeviceName(webinosType, inputConfig, function (webinosName) {
+                if (webinosName) {
+                    var name, i;
+                    var webinos_root =  (webinosType.search("Pzh") !== -1)? wPath.webinosPath()+"Pzh" :wPath.webinosPath();
+                    self.metaData.webinosRoot = (webinosType.search("Pzh") !== -1)? (webinos_root + "/" + webinosName): webinos_root;
+                    if (self.metaData.webinosRoot) {
+                        for (i = 0; i < self.fileList.length; i = i + 1) {
+                            name = self.fileList[i];
+                            var fileName = (name.fileName !== null) ? (name.fileName+".json"):(webinosName +".json");
+                            var filePath = path.join (self.metaData.webinosRoot, name.folderName, fileName);
+                            if( !existsSync(filePath)){
+                                return callback(false, webinosName);
+                            }
+                        }
+                        return callback(true);
+                    } else throw "failed setting webinos root path";
+                } else throw "failed fetching webinos device id";
+            });
+        } catch (err) {
+            throw err;
+            callback(false);
+        }
+    }
+
+    /**
+     * C
+     * @param type - this is the webinos type (pzp/pzh/pzhp)
+     * @param callback -
      * @return {*}
      */
-    function createDefaultDirectories(type, callback) {
-        var dirPath, root_permission = "0744", internal_permission = "0744";
-        var webinos_root =  (type.search("Pzh") !== -1)? wPath.webinosPath()+"Pzh" :wPath.webinosPath();
+    function createDefaultDirectories(type) {
         try {
-            //In case of node 0.6, define the fs existsSync
-            if (!existsSync (webinos_root)) {//If the folder doesn't exist
-                fs.mkdirSync (webinos_root, root_permission);//Create it
-             }
-
-            if (!existsSync (self.metaData.webinosRoot))//If the folder doesn't exist
-                fs.mkdirSync (self.metaData.webinosRoot, internal_permission);
+            var permission = "0744";
+            var webinos_root =  (type.search("Pzh") !== -1)? wPath.webinosPath()+"Pzh" :wPath.webinosPath();
+            //If the folder doesn't exist
+            if (!existsSync (webinos_root)) fs.mkdirSync (webinos_root, permission);
+            if (!existsSync (self.metaData.webinosRoot)) fs.mkdirSync (self.metaData.webinosRoot, permission);
             // webinos root was created, we need the following 1st level dirs
             var list = [ path.join (self.metaData.webinosRoot, "logs"),
                 path.join (webinos_root, "wrt"),
@@ -223,15 +256,21 @@ function Config () {
                 path.join (self.metaData.webinosRoot, "certificates", "external"),
                 path.join (self.metaData.webinosRoot, "certificates", "internal")];
             list.forEach (function (name) {
-                if (!existsSync (name)) fs.mkdirSync (name, internal_permission);
+                if (!existsSync (name)) fs.mkdirSync (name, permission);
             });
             // Notify that we are done
-            callback (true);
+            return true;
         } catch (err) {
-            //Notify that something went wrong
-            return callback (false, err.code);
+            logger.error("Failed in creating directories");
+            return false;
         }
     }
+
+    /**
+     *
+     * @param user
+     * @param defaultCert
+     */
     function storeUserData(user, defaultCert){
         var key;
         self.userData = {};
@@ -258,32 +297,35 @@ function Config () {
             webinos_root =  (webinosType.search("Pzh") !== -1)? wPath.webinosPath()+"Pzh" :wPath.webinosPath();
             self.metaData.webinosRoot = (webinosType.search("Pzh") !== -1)? webinos_root+ "/" + self.metaData.webinosName: webinos_root;
 
-            createDefaultDirectories(webinosType, function (status) {
-                if (status) {
-                    logger.log ("created default webinos directories at location : " + self.metaData.webinosRoot);
-                    var key, defaultConfig = require(filePath);
-                    self.metaData.webinos_version = defaultConfig.webinos_version;
-                    self.userPref.ports = defaultConfig.ports;
-                    self.userData = defaultConfig.certConfiguration;
-                    if(inputConfig.user)  storeUserData(inputConfig.user, defaultConfig.certConfiguration);
-                    setFriendlyName(inputConfig.friendlyName || defaultConfig.friendlyName);
-                    if (webinosType === "Pzh" || webinosType === "PzhCA") {
-                        self.serviceCache = defaultConfig.pzhDefaultServices.slice(0);
-                        self.metaData.friendlyName = self.userData.name +" ("+ self.userData.authenticator + ")";
-                    } else if (webinosType === "Pzp" || webinosType === "PzpCA") {
-                        self.serviceCache = defaultConfig.pzpDefaultServices.slice(0);
-                    }
-
-                    createPolicyFile();
-                    storeAll();
-                    callback (true);
-                } else {
-                    callback (false, "failed creating webinos default directories");
+            if (createDefaultDirectories(webinosType)) {
+                logger.log ("created default webinos directories at location : " + self.metaData.webinosRoot);
+                var defaultConfig = require(filePath);
+                self.metaData.webinos_version = defaultConfig.webinos_version;
+                self.userPref.ports = defaultConfig.ports;
+                self.userData = defaultConfig.certConfiguration;
+                if(inputConfig.user)  storeUserData(inputConfig.user, defaultConfig.certConfiguration);
+                setFriendlyName(inputConfig.friendlyName || defaultConfig.friendlyName);
+                if (webinosType === "Pzh" || webinosType === "PzhCA") {
+                    self.serviceCache = defaultConfig.pzhDefaultServices.slice(0);
+                    self.metaData.friendlyName = self.userData.name +" ("+ self.userData.authenticator + ")";
+                } else if (webinosType === "Pzp" || webinosType === "PzpCA") {
+                    self.serviceCache = defaultConfig.pzpDefaultServices.slice(0);
                 }
-            });
+                createPolicyFile();
+                storeAll();
+                callback (true);
+            } else {
+                callback (false, "failed creating webinos default directories");
+            }
         });
     }
 
+    /**
+     *
+     * @param webinosType
+     * @param inputConfig
+     * @param callback
+     */
     function createNewConfiguration (webinosType, inputConfig, callback) {
         try {
             fetchDefaultWebinosConfiguration(webinosType, inputConfig, function (status) {
@@ -327,78 +369,96 @@ function Config () {
             if (callback) {callback (false, err);}
         }
     }
-    /**
-     * Checks if metaData exists, if not creates a range of certificates
-     * it calls generating certificate function defined in certificate manager.
-     *
-     * @param {function} callback It is callback function that is invoked after
-     * checking/creating certificates
-     */
-    this.setConfiguration = function (webinosType, inputConfig, callback) {
-        checkConfigExists(webinosType, inputConfig, function(status) {
-            if(status) {
-                self.fileList.forEach(function(name){
-                    self.fetchDetails(name.folderName, name.fileName, name.object);
-                });
-                checkDefaultValues(webinosType);
-                callback(true);
-            } else {
-                createNewConfiguration (webinosType, inputConfig, callback);
-            }
-        });
-    };
 
-    this.storeKeys = function (keys, name) {
-        var filePath = path.join(self.metaData.webinosRoot, "keys", name+".pem");
-        fs.writeFile(path.resolve(filePath), keys, function(err) {
-            if(err) {
-                logger.error("failed saving " + name +".pem");
-            } else {
-                logger.log("saved " + name +".pem");
-                //calling get hash
-                // self.getKeyHash(filePath);
-            }
-        });
-    };
     /**
      *
-     * @param data
-     */
-    this.storeDetails = function (folderName, type, data) {
-        var fileName = type+".json";
-        var filePath = path.join (self.metaData.webinosRoot, folderName, fileName);
-        fs.writeFile (path.resolve (filePath), JSON.stringify (data, null, " "), function (err) {
-            if (err) {
-                logger.error ("failed saving in "+ folderName);
-            } else {
-                logger.log ("saved "+ filePath);
-                updateWebinosConfig(folderName, type);
-            }
-        });
-    };
-    /**
-     *
+     * @param webinosType
+     * @param inputConfig
      * @param callback
      */
-    this.fetchDetails = function (folderName, type, assignValue) {
-        var fileName = type+".json";
-        var filePath = path.join (self.metaData.webinosRoot, folderName, fileName);
+    this.setConfiguration = function (webinosType, inputConfig, callback) {
         try {
-            var data = fs.readFileSync (path.resolve (filePath));
-            var dataString = data.toString ();
+            checkConfigExists(webinosType, inputConfig, function(status) {
+                if(status) {
+                    self.fileList.forEach(function(name){
+                        self.fetchDetails(name.folderName, name.fileName, name.object);
+                    });
+                    checkDefaultValues(webinosType);
+                    callback(true);
+                } else {
+                    createNewConfiguration(webinosType, inputConfig, callback);
+                }
+            });
+        } catch (err) {
+            logger.error(err);
+            callback(false);
+        }
+    };
+    /**
+     * Used for generating key hash
+     * @param {String} keys - private key to be stored
+     * @param {String} name - name of the file
+     */
+    this.storeKeys = function (keys, name) {
+        var filePath = path.join(self.metaData.webinosRoot, "keys", name+".pem");
+        try {
+            fs.writeFileSync(path.resolve(filePath), keys);
+            logger.log("saved " + name +".pem");
+            //calling get hash
+            // self.getKeyHash(filePath);
+            return true;
+        } catch (err) {
+            return false;
+        }
+    };
+    /**
+     * Stores webinos configuration in the webinos configuration default directory
+     * @param folderName -
+     * @param fileName
+     * @param data
+     * @return {function} callback - returns callback with status true if saveor else false if it fails
+     */
+    this.storeDetails = function(folderName, fileName, data, callback) {
+        var filePath = path.join (self.metaData.webinosRoot, folderName, fileName+".json");
+        try {
+            fs.writeFileSync(path.resolve(filePath), JSON.stringify (data, null, " "));
+            logger.log ("webinos configuration stored in " + filePath);
+            if (folderName === "userData") updateWebinosConfig(fileName);
+            if (callback) callback(true);
+        } catch(err) {
+            logger.error("failed storing in  " + filePath);
+            if (callback) callback(false);
+        }
+    };
+    /**
+     * Fetches webinos configuration data (JSON object) from the webinos configuration default directory
+     * @param {String} folderName - folder inside webinos configuration specific directory
+     * @param {String} fileName - name of the file from where to read configuration inside folderName
+     * @param {Object} assignValue - value read is assigned in the passed object
+     * @param {function} callback - returns true if successful in reading else false
+     */
+    this.fetchDetails = function(folderName, fileName, assignValue, callback) {
+        var filePath = path.join(self.metaData.webinosRoot, folderName, fileName+".json");
+        try {
+            var data = fs.readFileSync(path.resolve(filePath));
+            var dataString = data.toString();
             if (dataString !== "") {
                 data = JSON.parse(dataString);
                 for (var key in data) {
-                    assignValue[key] = data[key];
+                    if (data.hasOwnProperty(key)) assignValue[key] = data[key];
                 }
+                return true;
+            } else {
+                throw "webinos configuration data is empty in the file, considering it is corrupted";
             }
-        } catch(err) {
-            logger.log(err);
-            logger.error ("configuration file "+ filePath+" is corrupted, retrying again to create fresh configuration");
+        } catch(error) {
+            logger.error("webinos configuration file "+ filePath +" is corrupted");
+            logger.error("more details " + error);
+            return false;
         }
     };
 }
 
-util.inherits (Config, certificate);
+require("util").inherits (Config, certificate);
 
 module.exports = Config;

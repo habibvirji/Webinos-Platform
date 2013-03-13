@@ -17,14 +17,13 @@
  *******************************************************************************/
 var writeInfo = {}, writeError = {};
 
-var Log = function (filename) {
+ function WebinosLogging (filename) {
     "use strict";
     var util = require("util");
     var path = require ('path');
     var fs   = require ('fs');
     var os   = require ("os");
     var wPath= require("./webinosPath.js");
-
 
     try {
         var ansi = require ('ansi');
@@ -54,8 +53,6 @@ var Log = function (filename) {
     logging.addId = function (id) {
         this.id = id;
     };
-
-
 
     logging.error = function (msg) {
         var date = new Date (), name;
@@ -155,7 +152,7 @@ var Log = function (filename) {
         }
     };
 
-  return logging;
-};
+     return logging;
+}
 
-module.exports = Log;
+module.exports = WebinosLogging;

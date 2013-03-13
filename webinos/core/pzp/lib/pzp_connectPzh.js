@@ -3,21 +3,21 @@
  * Connects with PZH and handle respective events
  */
 var PzpOtherManager = require("./pzp_otherManager.js");
-var PzpCommon       = require("./pzp.js");
 
 var PzpConnectHub = function () {
     "use strict";
     PzpOtherManager.call(this);
-    var self = this;
-    var logger = PzpCommon.wutil.webinosLogging (__filename) || console;
+    var PzpCommon       = require("./pzp.js");
+    var PzpObject = this;
+    var logger = PzpCommon.wUtil.webinosLogging (__filename) || console;
 
     /**
      * If PZP fails to connect to PZH, this tries to connect back to PZH
      */
     function retryConnecting () {
-        if (self.getEnrolledStatus()) {
+        if (PzpObject.getEnrolledStatus()) {
             setTimeout (function () {
-                self.connect (function (status) {
+                PzpObject.connectHub(function (status) {
                     logger.log ("retrying to connect back to the PZH " + (status ? "successful" : "failed"));
                 });
             }, 60000);//increase time limit to suggest when it should retry connecting back to the PZH
@@ -30,21 +30,22 @@ var PzpConnectHub = function () {
     this.connectHub = function (callback) {
         var pzpClient;
         try {
-            self.setConnectionParameters(function (certificateConfiguration) {
-                pzpClient = require("tls").connect(parent.getPorts().provider,
-                    self.getServerAddress(),
+            PzpObject.setConnectionParameters(function (status, certificateConfiguration) {
+                pzpClient = PzpCommon.tls.connect(PzpObject.getPorts().provider,
+                    PzpObject.getServerAddress(),
                     certificateConfiguration, function() {
                     logger.log ("connection to pzh status: " + pzpClient.authorized);
                     if (pzpClient.authorized) {
-                        authenticated (pzpClient, callback);
+                        PzpObject.handlePzhAuthentication(pzpClient, callback);
                     } else {
-                        unauthenticated (pzpClient, callback);
+                        PzpObject.unAuthentication(pzpClient);
+                        callback(false);
                     }
                 });
                 pzpClient.setTimeout(100);
 
                 pzpClient.on ("data", function (buffer) {
-                    handleMsg(pzpClient, buffer);
+                    PzpObject.handleMsg(pzpClient, buffer);
                 });
 
                 pzpClient.on ("close", function(had_error) {
@@ -53,12 +54,12 @@ var PzpConnectHub = function () {
                     }
                 });
                 pzpClient.on ("end", function() {
-                    if (pzpClient.id) cleanUp(pzpClient.id);
+                    if (pzpClient.id) PzpObject.cleanUp(pzpClient.id);
                     retryConnecting();
                 });
 
                 pzpClient.on ("error", function(err) {
-                    handlePzpError(err);
+                    PzpObject.handlePzpError(err);
                 });
             });
         } catch (err) {

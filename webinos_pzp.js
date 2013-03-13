@@ -16,7 +16,7 @@
  *
  *******************************************************************************/
 
-var pzp = require ("./webinos/core/pzp/lib/pzp");
+var Pzp = require ("./webinos/core/pzp/lib/pzp");
 __EnablePolicyEditor = false;
 
 var argv = require ('optimist')
@@ -93,15 +93,15 @@ function initializeWidgetServer () {
     var wrt = require ("./webinos/core/manager/widget_manager/lib/ui/widgetServer");
     if (typeof wrt !== "undefined") {
         // Attempt to start the widget server.
-        wrt.start (argv.signedWidgetOnly, argv.enforceWidgetCSP, pzp.session.getWebinosPorts ().pzp_webSocket,
+        wrt.start (argv.signedWidgetOnly, argv.enforceWidgetCSP, Pzp.session.getWebinosPorts ().pzp_webSocket,
             function (msg, wrtPort) {
                 if (msg === "startedWRT") {
                     // Write the websocket and widget server ports to file so the renderer can pick them up.
                     var wrtConfig = {};
                     wrtConfig.runtimeWebServerPort = wrtPort;
-                    wrtConfig.pzpWebSocketPort = pzp.session.getWebinosPorts ().pzp_webSocket;
-                    wrtConfig.pzpPath = pzp.session.getWebinosPath ();
-                    require ("fs").writeFile ((require ("path").join (pzp.session.getWebinosPath (), '../wrt/webinos_runtime.json')),
+                    wrtConfig.pzpWebSocketPort = Pzp.session.getWebinosPorts ().pzp_webSocket;
+                    wrtConfig.pzpPath = Pzp.session.getWebinosPath ();
+                    require ("fs").writeFile ((require ("path").join (Pzp.session.getWebinosPath (), '../wrt/webinos_runtime.json')),
                         JSON.stringify (wrtConfig, null, ' '), function (err) {
                             if (err) {
                                 console.log ('error saving runtime configuration file: ' + err);
@@ -117,7 +117,7 @@ function initializeWidgetServer () {
 }
 
 function initializePzp (config) {
-    pzp.session.initializePzp (config, function (status, result) {
+   Pzp.session.getInstance().initializePzp(config, function (status, result) {
         testStart(status);
         if (status) {
             if (argv.widgetServer)

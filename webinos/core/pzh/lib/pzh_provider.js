@@ -153,7 +153,9 @@ var Provider = function (_hostname, _friendlyName) {
         if (webInterface === null) {
             webInterface = new pzh_webSession(pzhs, hostname, config.userPref.ports.provider_webServer, config.userPref.ports.provider, addPzhDetails, refreshCert, getAllPzhList);
         }
-        return !!(conn.getPeerCertificate().subject.CN.indexOf("PzhWS") !== -1 && conn.getPeerCertificate().subjectaltname.split(":")[1] === hostname); // Verifies if it is Web Interface Certificate
+        return !!(conn.getPeerCertificate() && conn.getPeerCertificate().subject &&
+            conn.getPeerCertificate().subject.CN.indexOf("PzhWS") !== -1 &&
+            conn.getPeerCertificate().subjectaltname.split(":")[1] === hostname); // Verifies if it is Web Interface Certificate
     }
 
     /**

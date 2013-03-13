@@ -16,14 +16,10 @@
  * Copyright 2012 - 2013 Samsung Electronics (UK) Ltd
  * AUTHORS: Ziran Sun (ziran.sun@samsung.com)
  *******************************************************************************/
-var os = require("os");
-var https = require('https');
-var path        = require("path");
-var webinos = require("find-dependencies")(__dirname);
-var logger  = webinos.global.require(webinos.global.util.location, "lib/logging.js")(__filename) || console;
-
-var PzpSIBAuth = function(_parent){
-
+function PzpSIBAuth(PzpInstance) {
+    "use strict";
+    var PzpCommon = require("./pzp.js");
+    var logger  = PzpCommon.wUtil.webinosLogging(__filename) || console;
     /**
      * Create QR image using public key Hash
      * @param infile. Path for the public key certificate
@@ -33,14 +29,13 @@ var PzpSIBAuth = function(_parent){
      * @param cb. Callback when QR image generated
      */
     this.createQRHash = function(infile, outfile, width, height, cb) {
-        _parent.config.getKeyHash(infile, function(status, value){
-            if(status)
-            {
+        PzpInstance.getKeyHash(infile, function(status, value){
+            if(status) {
                 logger.log("get hash: " + value);
-                if(os.platform().toLowerCase() == "android") {
+                if(PzpCommon.os.platform().toLowerCase() == "android") {
                     try {
                         var bridge = require('bridge');
-                        QRencode = bridge.load('org.webinos.impl.QRImpl', this);
+                        var QRencode = bridge.load('org.webinos.impl.QRImpl', this);
                         QRencode.enCode(value, width, height, outfile, function(outfile){
                             cb(outfile);
                         });
@@ -74,11 +69,10 @@ var PzpSIBAuth = function(_parent){
      * @param cb. Callback when comprison is done
      */
     this.checkQRHash = function(filename, hash, cb) {
-        _parent.config.getKeyHash(filename, function(status, value){
+        PzpInstance.getKeyHash(filename, function(status, value){
             if(status)
             {
                 logger.log("hash passed over is: " + hash);
-
                 logger.log("get hash of the other party: " + value)
                 if(hash == value){
                     logger.log("correct hash key");
@@ -96,6 +90,7 @@ var PzpSIBAuth = function(_parent){
             }
         });
     };
-}
+};
 
 module.exports = PzpSIBAuth;
+

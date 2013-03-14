@@ -11,7 +11,6 @@
 			includes="
 				webinos_pzp.js,
 				webinos_config.json,
-				node_modules/ansi/,
 				node_modules/connect/,
 				node_modules/crypt/,
 				node_modules/data2xml/,

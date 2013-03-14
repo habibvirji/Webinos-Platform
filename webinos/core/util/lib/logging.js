@@ -24,15 +24,11 @@ var writeInfo = {}, writeError = {};
     var fs   = require ('fs');
     var os   = require ("os");
     var wPath= require("./webinosPath.js");
-
-    try {
-        var ansi = require ('ansi');
-        var cursor = ansi (process.stderr);
-    } catch (err) {
-        console.log ("missing ansi module(to get messages in colorful colors), run npm install ansi to install ansi module");
-        cursor = console;
-    }
-
+    var red   = '\u001b[31m';
+    var green = '\u001b[32m';
+    var blue = '\u001b[34m';
+    var cyan = '\u001b[36m';
+    var yellow = '\u001b[33m'
     function getLineNumber () {
         var error = new Error ();
         return ((os.type ().toLowerCase () === "windows_nt")?(error.stack.split ('\n')[3].split (':')[2]):(error.stack.split ('\n')[3].split (':')[1]));
@@ -57,12 +53,11 @@ var writeInfo = {}, writeError = {};
     logging.error = function (msg) {
         var date = new Date (), name;
         var id = this.id ? " [" + this.id + "] " : " ";
-        if (typeof msg === "object") {msg = util.inspect(msg);}
+        if (typeof msg === "object") {msg = util.inspect(msg,  { showHidden: true, depth: 3, colors: true });}
         if (os.type ().toLowerCase () === "windows_nt") { name = this.name.split ("\\").pop (); } else { name = this.name.split ("/").pop ();}
         var time = date.getDate () + "." + (date.getMonth() + 1) + "." + date.getFullYear () + " " + date.getHours () + ":" + date.getMinutes () + ":" + date.getSeconds () + ":" + date.getMilliseconds ();
-        var formattedMsg = "[" + time + "] error " + name + "(" + getLineNumber () + ")" + id + msg + "\n";
-        cursor.fg.red ().write (formattedMsg);
-        cursor.fg.reset ();
+        var formattedMsg = yellow + "[" + time + "]"+red+" error " + green + name + "(" + getLineNumber () + ")" + id + red + msg + "\n";
+        util.error(formattedMsg);
         this.writeLog ("error", "<p>" + formattedMsg + "</p>");
     };
 
@@ -72,9 +67,8 @@ var writeInfo = {}, writeError = {};
         if (typeof msg === "object") {msg = util.inspect(msg);}
         if (os.type ().toLowerCase () === "windows_nt") { name = this.name.split ("\\").pop (); } else { name = this.name.split ("/").pop ();}
         var time = date.getDate () + "." + (date.getMonth() + 1) + "." + date.getFullYear () + "-" + date.getHours () + ":" + date.getMinutes () + ":" + date.getSeconds () + ":" + date.getMilliseconds ();
-        var formattedMsg = "[" + time + "] info " + name + "(" + getLineNumber () + ")" + id + msg + "\n";
-        cursor.fg.cyan ().write (formattedMsg);
-        cursor.fg.reset ();
+        var formattedMsg = yellow + "[" + time + "]"+ blue+" info " + green + name + "(" + getLineNumber () + ")" + id + cyan + msg + "\n";
+        util.print(formattedMsg);
         this.writeLog ("info", "<p>" + formattedMsg + "</p>");
     };
 

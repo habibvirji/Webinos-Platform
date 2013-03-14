@@ -16,55 +16,41 @@
 * Copyright 2011 University of Oxford
 *******************************************************************************/
 
-var cacert = 0;
-var pzpcert = 2;
-
-var certman = null;
-if (process.platform != 'android')
-  certman = require("../src/build/Release/certificate_manager");
-else
-  certman = require('certificate_manager');
-
+var certman = require('certificate_manager');
+var path = require("path");
 var debug = true;
-var caKey = null;
-caKey = certman.genRsaKey(1024);
+var caKey = certman.genRsaKey(2048);
 if (debug) console.log("CA Master Key \n[" + caKey + "]\n");
 
-var caCertReq = null;
-caCertReq = certman.createCertificateRequest(caKey, 
+var caCertReq = certman.createCertificateRequest(caKey,
     "UK","OX","Oxford","Univ. Oxford","Computer Science", "Johns PZH CA", "john.lyle@cs.ox.ac.uk");
-if (debug) console.log("CA Certificate Request: \n[" + caCertReq + "]\n");
+if (debug) console.log("PZH CA Certificate Request: \n[" + caCertReq + "]\n");
 
-var caCert = null;
-caCert = certman.selfSignRequest(caCertReq, 30, caKey, cacert ,"URI:http://test.url");
-if (debug) console.log("CA Certificate: \n[" + caCert + "]\n");
+var caCert = certman.selfSignRequest(caCertReq, 30, caKey, 0 ,"URI:http://test.url");
+if (debug) console.log("PZH CA Certificate: \n[" + caCert + "]\n");
 
 
-var crl = null;
-crl = certman.createEmptyCRL(caKey, caCert, 30, 0);
-if (debug) console.log("Empty PZH CRL: \n[" + crl + "]\n");
+var crl = certman.createEmptyCRL(caKey, caCert, 30, 0);
+if (debug) console.log("PZH CRL: \n[" + crl + "]\n");
 
-var pzpKey = null; 
-pzpKey = certman.genRsaKey(1024);
-if (debug) console.log("Dummy PZP Master Key \n[" + pzpKey + "]\n");
+var pzpKey = certman.genRsaKey(1024);
+if (debug) console.log("PZP Master Key \n[" + pzpKey + "]\n");
 
-var pzpCertReq = null;
-pzpCertReq = certman.createCertificateRequest(pzpKey, 
+var pzpCertReq = certman.createCertificateRequest(pzpKey,
     "UK","OX","Oxford","Univ. Oxford","Computer Science", "Johns PZP", "john.lyle@cs.ox.ac.uk");
 if (debug) console.log("PZP Certificate Request: \n[" + pzpCertReq + "]\n");
 
-var pzpCert = null;
-pzpCert = certman.signRequest(pzpCertReq, 30, caKey, caCert, pzpcert,"URI:http://test.url");
+var pzpCert = certman.signRequest(pzpCertReq, 30, caKey, caCert, 1, "URI:http://test.url");
 if (debug) console.log("PZP Certificate, signed by PZH CA: \n[" + pzpCert + "]\n");
 
 
-var crlWithKey = null;
-crlWithKey = certman.addToCRL(caKey, crl, pzpCert);
+var crlWithKey = certman.addToCRL(caKey, crl, pzpCert);
 if (debug) console.log("PZP Certificate revoked, new CRL: \n[" + crlWithKey + "]\n");
 
-var hash = null; 
-hash = certman.getHash("./conn.pem");
-if (debug) console.log("PZP public hash key, hash: \n[" + hash + "]\n");
+var cert_path = path.join(__dirname, "conn.pem");
+var hash = certman.getHash(cert_path);
+console.log("PZP public hash key, hash: \n[" + hash + "]\n");
+
 
  
 

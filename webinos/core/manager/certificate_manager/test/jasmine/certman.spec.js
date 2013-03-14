@@ -19,7 +19,8 @@
 // TODO: more than just checks for not-empty, need to check some fields
 // there is an x509 module somewhere I need to use...
 
-var certman = require("../../src/build/Release/certificate_manager");
+var certman = require("certificate_manager");
+
 var util = require("util");
 var rsakey;
 var certReq;
@@ -58,8 +59,7 @@ describe("generate keys", function() {
 describe("generate certificate requests", function() {
     it("can create a certificate request", function() {       
         certReq = certman.createCertificateRequest(rsakey, 
-    "UK","OX","Oxford","Univ. Oxford","Computer Science","CA Key", "john.lyle@cs.ox.ac.uk");
-        
+            "UK","OX","Oxford","Univ. Oxford","Computer Science","Pzh:CA Key", "john.lyle@cs.ox.ac.uk");
         expect(certReq).not.toBeNull();
         expect(certReq).toContain(CERT_REQ_START);
         expect(certReq).toContain(CERT_REQ_END);
@@ -79,7 +79,7 @@ describe("sign certificate requests", function() {
     it("can sign another certificate request", function() {
         childKey = certman.genRsaKey(1024);
         childReq = certReq = certman.createCertificateRequest(rsakey, 
-    "UK","OX","Oxford","Univ. Oxford","Computer Science", "Client Key", "john.lyle@cs.ox.ac.uk");
+            "UK","OX","Oxford","Univ. Oxford","Computer Science", "Pzp:Client Key", "john.lyle@cs.ox.ac.uk");
         childCert = certman.signRequest(childReq, 30, rsakey, ssCert, 1, "URI:pzh.webinos.org");
         expect(childCert).not.toBeNull();
         expect(childCert).toContain(CERT_START);
@@ -110,7 +110,7 @@ describe("Proper error handling", function() {
     it("will error given a bad altname", function() {
         childKey = certman.genRsaKey(1024);
         childReq = certReq = certman.createCertificateRequest(rsakey, 
-        "UK","OX","Oxford","Univ. Oxford","Computer Science", "Client Key", "john.lyle@cs.ox.ac.uk");
+            "UK","OX","Oxford","Univ. Oxford","Computer Science", "Client Key", "john.lyle@cs.ox.ac.uk");
         try {
             childCert = certman.signRequest(childReq, 30, rsakey, ssCert, 1, "foo://bar");
             expect(childCert).toBeNull(); //shouldn't get here.
@@ -118,14 +118,14 @@ describe("Proper error handling", function() {
             expect(err).not.toBeGreaterThan(0);
             expect(err.toString()).toEqual("Error: Failed to sign a certificate");
         }
-        
     });
 });    
-    
+
 describe("get hash", function() {
-    it("can get hash of public certificate", function() {       
-        hash = certman.getHash("../conn.pem");
+    it("can get hash of public certificate", function() {
+        var path = require("path").join(__dirname,"../conn.pem");
+        var hash = certman.getHash(path);
         expect(hash).not.toBeNull();
-        expect(hash).not.toEqual("");
+        expect(hash).not.toEqual([]);
     });
 });

@@ -23,7 +23,7 @@
  * @param config object with optional forcedDeviceName property, overrides device name.
  * @param callback function which is called with device name as param.
  */
-exports.fetchDeviceName = function(type, config, callback) {
+exports.fetchWebinosName = function(type, config, callback) {
     var os = require('os');
     // use user defined device name if given
     if (config && config.forcedDeviceName) {
@@ -66,6 +66,6 @@ exports.fetchDeviceName = function(type, config, callback) {
         id = require("crypto").createHash("md5").update(os.hostname() + process.cwd()).digest("hex");
         callback(id.substring (0, 40));
     } else if (type.search("Pzh") !== -1){
-        callback(config.friendlyName);
+        callback((config && config.friendlyName) || "defaultPzh");
     }
 };

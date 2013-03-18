@@ -87,13 +87,12 @@ var Provider = function (_hostname, _friendlyName) {
      * @param callback - If successful returns true or false uf server fails to start
      */
     function loadSession(callback) {
-        config = new util.webinosConfiguration();
         var inputConfig = {
             "friendlyName":friendlyName,
             "sessionIdentity":hostname
         };
-
-        config.setConfiguration("PzhP", inputConfig, function (status, value) {
+        config = new util.webinosConfiguration("PzhP", inputConfig);
+        config.createOrLoadWebinosConfiguration(function (status, value) {
             if (!status) {
                 logger.error("setting configuration for the zone provider failed, the .webinos directory needs to be deleted.")
                 return callback(status, value);

@@ -364,8 +364,8 @@ function Pzp() {
         try {
             PzpCommon.wUtil.webinosHostname.getHostName(inputConfig.sessionIdentity, function (hostname) {
                 inputConfig.sessionIdentity = hostname;
-                config = new PzpCommon.wUtil.webinosConfiguration ();// sets configuration
-                config.setConfiguration ("Pzp", inputConfig, function (status) {
+                config = new PzpCommon.wUtil.webinosConfiguration("Pzp", "inputConfig");// sets configuration
+                config.createOrLoadWebinosConfiguration(function (status) {
                     if (status) {
                         checkMode();   //virgin or hub mode
                         PzpObject.setSessionId();//sets pzp sessionId
@@ -442,10 +442,10 @@ function Pzp() {
             forcedDeviceName: '',
             sessionIdentity: '0.0.0.0'
         };
-        config = new PzpCommon.wUtil.webinosConfiguration ();// sets configuration
         PzpCommon.wUtil.webinosHostname.getHostName(inputConfig.sessionIdentity, function (hostname) {
             inputConfig.sessionIdentity = hostname;
-            config.setConfiguration ("Pzp", inputConfig, function (status) {
+            config = new PzpCommon.wUtil.webinosConfiguration ("Pzp", inputConfig);// sets configuration
+            config.setConfiguration (function (status) {
                 if (status) {
                     pzpState.enrolled  = false;
                     pzpState.sessionId = config.metaData.webinosName;
@@ -567,6 +567,13 @@ function Pzp() {
     this.getCertificateToBeSignedByPzh = function() {
         return config.cert.internal.master.csr;
     };
+    process.on("CALLBACK_MISSING", function() {
+
+    });
+    process.on("PARAM_WRONG", function() {
+
+    });
+
 };
 
 require("util").inherits(Pzp, PzpWebSocket);

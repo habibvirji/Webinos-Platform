@@ -93,13 +93,13 @@ function loadWSCertificate(config, certName, certLabel, callback) {
 }
 
 starter.start = function(hostname, friendlyName, callback) {
-    var config = new util.webinosConfiguration();
     util.webinosHostname.getHostName(hostname, function (address_) {
         var inputConfig = {
         "friendlyName": friendlyName,
         "sessionIdentity": address_
         };
-        config.setConfiguration("PzhP", inputConfig, function (status, value) {
+        var config = new util.webinosConfiguration("PzhP", inputConfig);
+        config.createOrLoadWebinosConfiguration(function (status, value) {
             if (!status) {
                 logger.error(value);
                 logger.error("setting configuration for the zone provider failed, the .webinos directory needs to be deleted.")

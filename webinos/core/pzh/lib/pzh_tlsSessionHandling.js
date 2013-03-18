@@ -355,8 +355,8 @@ var Pzh = function () {
                 "sessionIdentity":_uri,
                 "user"           :_user
             };
-            self.config = new util.webinosConfiguration ();
-            self.config.setConfiguration ("Pzh", inputConfig, function (status, value) {
+            self.config = new util.webinosConfiguration("Pzh", inputConfig);
+            self.config.createOrLoadWebinosConfiguration(function (status, value) {
                 if (status) {
                     self.pzh_state.sessionId = _uri;
                     self.pzh_state.logger.addId (self.config.userData.email[0].value);

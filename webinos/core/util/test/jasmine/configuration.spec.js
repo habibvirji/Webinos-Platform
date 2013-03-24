@@ -18,165 +18,96 @@ var inputConfig = {
     sessionIdentity: '0.0.0.0'
 };
 var ConfigInstance= new Configuration("Pzp", inputConfig);
+var existsSync = fs.existsSync || path.existsSync;
 
-// KeyStore JavaScript calls
-describe("KeyStore JS tests", function() {
-    var secretKey = "mySecret"+(Math.random()*100);
-    var checkKey;
-    it("generate and store key", function() {
-        ConfigInstance.generateStoreKey("Pzp", secretKey, function(status, key){
-            checkKey = key;
-            expect(status).toBeTruthy();
-            expect(key).not.toBeNull();
-            expect(key).not.toEqual("");
-            expect(key).toContain(RSA_START);
-            expect(key).toContain(RSA_END);
-        });
-    });
-    it("fetch a secret key", function() {
-        ConfigInstance.fetchKey(secretKey, function(status, key){
-            expect(status).toBeTruthy();
-            expect(key).not.toBeNull();
-            expect(key).not.toEqual("");
-            expect(key).toContain(RSA_START);
-            expect(key).toContain(RSA_END);
-            expect(key).toEqual(checkKey);
-        });
-    });
-    it("delete key", function() {
-        ConfigInstance.deleteKey(secretKey, function(status, errmsg){
-            expect(status).toBeTruthy();
-        });
-    });
-
-    // Check exceptions
-    it("check exception while storing generated key", function() {
-        ConfigInstance.generateStoreKey("Pzp", null, function(statusG, errMsg){
-            expect(statusG).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("KeyStore");
-            expect(errMsg.Type).toEqual("WRITE");
-            expect(errMsg.Message).toEqual("Failed storing key");
-        });
-    });
-    it("check exception while fetching key with empty secretKey", function() {
-        ConfigInstance.fetchKey(null, function(statusF, errMsg){
-            expect(statusF).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("KeyStore");
-            expect(errMsg.Type).toEqual("READ");
-            expect(errMsg.Message).toEqual("Failed fetching key");
-        });
-    });
-    it("check exception while deleting key", function() {
-        ConfigInstance.deleteKey(null, function(statusD, errMsg){
-            expect(statusD).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("KeyStore");
-            expect(errMsg.Type).toEqual("CLEANUP");
-            expect(errMsg.Message).toEqual("Failed deleting key");
-        });
-    });
-});
-
-describe("CertificateManager Server JS tests", function() {
-    it("generates server private key, csr, self signed certificate and crl", function() {
-        var cn ="PzpCA:" +  ConfigInstance.metaData.webinosName;
-        ConfigInstance.generateSelfSignedCertificate("PzpCA", cn, function(status, csr){
-            expect(status).toBeTruthy();
-            expect(csr).toEqual(undefined);
-            expect(ConfigInstance.cert.internal.master.cert).toContain(CERT_START);
-            expect(ConfigInstance.cert.internal.master.cert).toContain(CERT_END);
-            expect(ConfigInstance.crl.value).toContain(CRL_START);
-            expect(ConfigInstance.crl.value).toContain(CRL_END);
-            expect(ConfigInstance.cert.internal.master.key_id).toEqual(ConfigInstance.metaData.webinosName + "_master");
-        });
-    });
-});
-
-//Certificate manager JS calls
-describe("CertificateManager Client JS tests", function() {
-    it("generate client private key, csr, self signed certificate and crl", function() {
-        var cn ="Pzp:" + ConfigInstance.metaData.webinosName;
-        // PZP should return back csr
-        expect(ConfigInstance.cert.internal.master.cert).not.toBeNull();
-        expect(ConfigInstance.cert.internal.master.cert).toContain(CERT_START);
-        expect(ConfigInstance.cert.internal.master.cert).toContain(CERT_END);
-        expect(ConfigInstance.crl).not.toBeNull({ });
-        ConfigInstance.generateSelfSignedCertificate("Pzp", cn, function(status, csr){
-            expect(status).toBeTruthy();
-            expect(csr).not.toBeNull();
-            expect(csr).not.toEqual("");
-            expect(csr).toContain(CERT_REQ_START);
-            expect(csr).toContain(CERT_REQ_END);
-            expect(ConfigInstance.cert.internal.conn.cert ).toContain(CERT_START);
-            expect(ConfigInstance.cert.internal.conn.cert).toContain(CERT_END);
-            expect(ConfigInstance.cert.internal.conn.key_id).toEqual(ConfigInstance.metaData.webinosName + "_conn");
-            // Signed certificate back by PZP
-            ConfigInstance.generateSignedCertificate(csr, function(status, cert) {
-                expect(status).toBeTruthy();
-                expect(cert).not.toBeNull();
-                expect(cert).not.toEqual("");
-                expect(cert).toContain(CERT_START);
-                expect(cert).toContain(CERT_END);
-                // Revoke PZP certificate
-                ConfigInstance.revokeClientCert(cert, function(status, crl) {
-                    expect(status).toBeTruthy();
-                    expect(crl).not.toBeNull();
-                    expect(crl).not.toEqual("");
-                    expect(crl).toContain(CRL_START);
-                    expect(crl).toContain(CRL_END);
-                });
-            });
-        });
-
-    });
-});
-
-describe("CertificateManager Negative JS tests", function() {
-    it("Trigger error in CSR", function() {
-        ConfigInstance.generateSelfSignedCertificate("Pzp", "", function(status, errMsg){
-            expect(status).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("CertificateManager");
-            expect(errMsg.Type).toEqual("FUNC_ERROR");
-            expect(errMsg.Message).toEqual("failed generating CSR. user details are missing");
-        });
-    });
-    it("Trigger error in self-sign certificate", function() {
-        var serverName = ConfigInstance.metaData.serverName;
-        ConfigInstance.metaData.serverName = "";
-        ConfigInstance.generateSelfSignedCertificate("Pzp", "Pzp:"+ConfigInstance.metaData.webinosName, function(status, errMsg){
-            expect(status).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("CertificateManager");
-            expect(errMsg.Type).toEqual("FUNC_ERROR");
-            expect(errMsg.Message).toEqual("failed self signing certificate");
-            ConfigInstance.metaData.serverName = serverName;
-        });
-    });
-    it("Trigger error in signing certificate", function() {
-        expect(ConfigInstance.cert.internal.master.key_id).toEqual(ConfigInstance.metaData.webinosName + "_master");
-        ConfigInstance.generateSignedCertificate(undefined, function(status, errMsg) {
-            expect(status).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(errMsg).not.toEqual("");
-            expect(typeof errMsg).toEqual("object");
-        });
-    });
-});
-
-describe("Check configuration parameters", function(){
+describe("Check configuration parameters", function() {
+    // Check this is fresh instance and not duplicate of the 
     it("check configuration default values", function() {
-
+        expect(typeof ConfigInstance.metaData).toEqual("object");
+        expect(CurrentContext.metaData.webinosName).not.toBeNull();
+        expect(CurrentContext.metaData.webinosName).not.toEqual("");
+        expect(CurrentContext.metaData.webinosRoot).not.toBeNull();
+        expect(CurrentContext.metaData.webinosRoot).not.toEqual("");;
+        expect(CurrentContext.metaData.webinosRoot).toContain("webinos");
+        expect(typeof ConfigInstance.trustedList.pzh).toEqual("object");
+        expect(ConfigInstance.trustedList.pzh).toEqual({});
+        expect(typeof ConfigInstance.trustedList.pzp).toEqual("object");
+        expect(ConfigInstance.trustedList.pzp).toEqual({});
+        expect(typeof ConfigInstance.untrustedCert).toEqual("object");
+        expect(ConfigInstance.untrustedCert).toEqual({});
+        expect(typeof ConfigInstance.exCertList).toEqual("object");
+        expect(ConfigInstance.exCertList).toEqual({});
+        expect(typeof ConfigInstance.crl).toEqual("object");
+        expect(ConfigInstance.crl).toEqual({});
+        expect(typeof ConfigInstance.policies).toEqual("object");
+        expect(ConfigInstance.policies).toEqual({});
+        expect(typeof ConfigInstance.userData).toEqual("object");
+        expect(ConfigInstance.userData).not.toBeNull();
+        expect(typeof ConfigInstance.userPref).toEqual("object");
+        expect(ConfigInstance.userPref).toEqual({});
+        expect(typeof ConfigInstance.serviceCache).toEqual("array");
+        expect(ConfigInstance.serviceCache).toEqual([]);        
+        expect(typeof ConfigInstance.fileList).toEqual("object");
+        expect(Object.keys(ConfigInstance.fileList)).toEqual(10);
     });
+    // Create new configuration
     it("create new configuration", function(){
-
-    })
-    createOrLoadWebinosConfiguration
+        var webinosPath = require("").webinosPath();
+        ConfigInstance.createOrLoadWebinosConfiguration(function(status, value){
+            expect(status).toEqual(true);
+            expect(value).toBeNull();
+            it("Check Webinos directories are created properly", function(){  
+                expect(ConfigInstance.metaData.webinosRoot).toEqual(webinosPath); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "logs")).toEqual(true); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "wrt")).toEqual(true); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "certificates")).toEqual(true); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "certificates", "internal")).toEqual(true); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "certificates", "external")).toEqual(true); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "userData")).toEqual(true); 
+                expect(existSync(path.join(ConfigInstance.metaData.webinosRoot "keys")).toEqual(true);             
+            });
+            it("Check if values are properly set from webinos config", function(){  
+                expect(typeof ConfigInstance.metaData.webinos_version).toEqual("object");
+                expect(ConfigInstance.metaData.webinos_version).not.toBeNull();
+                expect(ConfigInstance.metaData.webinos_version).toEqual(webinosConfigValue.webinos_version);
+                expect(typeof ConfigInstance.metaData.userPref.ports).toEqual("object");
+                expect(ConfigInstance.metaData.userPref.ports).not.toBeNull();
+                expect(ConfigInstance.metaData.userPref.ports).toEqual(webinosConfigValue.userPref.ports);
+                expect(typeof ConfigInstance.metaData.userData).toEqual("object");
+                expect(ConfigInstance.metaData.userData).not.toBeNull();
+                expect(ConfigInstance.metaData.userData).toEqual(webinosConfigValue.certConfiguration);
+                expect(ConfigInstance.serviceCache).not.toBeNull();
+                expect(typeof ConfigInstance.serviceCache).toEqual("array");
+                expect(ConfigInstance.serviceCache).toEqual(webinosConfigValue.pzpDefaultServices);
+            });
+            it("Check set friendly name", function(){  
+                expect(ConfigInstance.metaData.friendlyName).not.toBeNull();
+                expect(ConfigInstance.metaData.friendlyName).toContain("Linux Device" || "Mobile" || "Windows PC" ||"MacBook" || "Webinos Device");
+            });  
+            it("Check configuration if it is stored in the files and contents of files are sane", function() {
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "metaData")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "crl")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "trustedList")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "untrustedList")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "exCertList")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "certificates", "internal", "certificates")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "certificates", "external", "certificates")).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "userData", "userDetails", )).toEqual(true);
+                expect(existSync(ConfigInstance.metaData.webinosRoot, "serviceCache")).toEqual(true);
+                expect(fs.readFileSync(ConfigInstance.metaData.webinosRoot, "metaData")).not.toEqual("");
+                expect(fs.readFileSync(ConfigInstance.metaData.webinosRoot, "crl")).toEqual({});
+                expect(fs.readFileSync(ConfigInstance.metaData.webinosRoot, "certificates", "external", "certificates")).toContain(CERT_START);
+                expect(fs.readFileSync(ConfigInstance.metaData.webinosRoot, "userData", "userDetails", )).toEqual(JSON.stringify(webinosConfigValue.certConfiguration));
+                expect(fs.readFileSync(ConfigInstance.metaData.webinosRoot, "certificates", "serviceCache")).toEqual(JSON.stringify(webinosConfigValue.serviceCache));
+                expect(fs.readFileSync(ConfigInstance.metaData.webinosRoot, "certificates", "userPref")).toEqual(JSON.stringify(webinosConfigValue.ports));
+            }); 
+            it("Check if certificates has been created" , function() {
+                expect(ConfigInstance.cert.internal.master.cert).toContain(CERT_START);
+                expect(ConfigInstance.cert.internal.master.cert).toContain(CERT_END);
+                expect(ConfigInstance.cert.internal.conn.cert).toContain(CERT_START);
+                expect(ConfigInstance.cert.internal.conn.cert).toContain(CERT_END);
+            });
+            
+        });    
+    });    
 });

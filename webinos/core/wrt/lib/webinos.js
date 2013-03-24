@@ -102,8 +102,7 @@
         };
         channel.onopen = function() {
           var url = window.location.pathname;
-          var filename = url.substring(url.lastIndexOf('/')+1);
-          webinos.session.message_send({type: 'prop', payload: {status:'registerBrowser', value: filename}});
+          webinos.session.message_send({type: 'prop', payload: {status:'registerBrowser', value: url}});
         };
     }
 

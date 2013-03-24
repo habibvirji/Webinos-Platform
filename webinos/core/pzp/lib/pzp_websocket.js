@@ -355,7 +355,7 @@ function PzpWebSocketServer(){
         if (connection) {
             if (!webAppName) webAppName = require("crypto").randomBytes(3).toString("hex").toUpperCase();
             var sessionWebApp = require("crypto").createHash("md5").update(PzpObject.getSessionId() + webAppName).digest("hex");
-            appId = PzpObject.getSessionId()  + "/"+ sessionWebApp;
+            appId = PzpObject.getSessionId()  + "/"+ sessionWebApp +"/" + Math.random();
             connectedWebApp[appId] = connection;
             connection.id = appId; // this appId helps in while deleting socket connection has ended
 

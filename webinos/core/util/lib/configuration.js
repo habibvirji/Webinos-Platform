@@ -17,85 +17,96 @@
 * Author: Habib Virji (habib.virji@samsung.com)
 *         Ziran Sun (ziran.sun@samsung.com)
 *******************************************************************************/
-var dependency = require ("find-dependencies") (__dirname);
-var certificate = dependency.global.require (dependency.global.manager.certificate_manager.location);
-
 /**
  * Creates a webinos configuration
  * - Creates default directories in .webinos or AppData/Roaming/webinos or /data/data/org.webinos.app
  * - Read webinos_config and separate them in different files
  * - Default certificates from client and master
- * @param {Object} inputConfig - These are command line parameters that are passed by PZH or PZP
- * @constructor
+ *@param {Object} inputConfig - These are command line parameters that are passed by PZH or PZP
+ *@constructor
  */
 function Config(webinosType, inputConfig) {
     "use strict";
     var path = require ("path");
     var fs = require ("fs");
+    var dependency = require ("find-dependencies") (__dirname);
     var logger = require("./logging.js") (__filename) || console;
+    var Certificate = dependency.global.require (dependency.global.manager.certificate_manager.location);
     var wPath = require("./webinosPath.js");
-
-    var CurrentContext = this;
-    certificate.call(CurrentContext);
-    CurrentContext.metaData={webinosType: webinosType};
-    CurrentContext.trustedList={pzh:{}, pzp:{}};
-    CurrentContext.untrustedCert={};
-    CurrentContext.exCertList={};
-    CurrentContext.crl={};
-    CurrentContext.policies={};
-    CurrentContext.userData={};
-    CurrentContext.userPref={};
-    CurrentContext.serviceCache=[];
+    var webinosConfigValue;
+    var ConfigContext = this;
     var existsSync = fs.existsSync || path.existsSync;
-
-    CurrentContext.fileList = [{folderName: null, fileName: "metaData", object: CurrentContext.metaData},
-        {folderName: null, fileName: "crl", object: CurrentContext.crl},
-        {folderName: null, fileName:"trustedList", object: CurrentContext.trustedList},
-        {folderName: null, fileName:"untrustedList", object: CurrentContext.untrustedCert},
-        {folderName: null, fileName:"exCertList", object: CurrentContext.exCertList},
-        {folderName: path.join("certificates", "internal"),fileName: "certificates", object: CurrentContext.cert.internal},
-        {folderName: path.join("certificates", "external"),fileName: "certificates", object: CurrentContext.cert.external},
-        {folderName:"userData", fileName: "userDetails", object: CurrentContext.userData},
-        {folderName:"userData", fileName:"serviceCache", object: CurrentContext.serviceCache},
-        {folderName:"userData", fileName:"userPref", object: CurrentContext.userPref}];
-
+    
+    function initializeConfigContext() {
+        ConfigContext.metaData={};
+        ConfigContext.trustedList={pzh:{}, pzp:{}};
+        ConfigContext.untrustedCert={};
+        ConfigContext.exCertList={};
+        ConfigContext.crl={};
+        ConfigContext.policies={};
+        ConfigContext.userData={};
+        ConfigContext.userPref={};
+        ConfigContext.serviceCache=[];        
+        setWebinosMetaData();
+    }
     /**
-     * This function sets default value to make certificate and keystore run correctly
-     * If user has modified default values, default values updated by this function will be overwritten
-     */
-    function setWebinosRoot() {
-        var webinos_root =  (CurrentContext.metaData.webinosType.search("Pzh") !== -1)?
+    * This function sets default value to make certificate and keystore run correctly
+    * If user has modified default values, default values updated by this function will be overwritten
+    */
+    function setWebinosMetaData() {
+        ConfigContext.metaData.webinosType = webinosType,
+        var webinos_root =  (ConfigContext.metaData.webinosType.search("Pzh") !== -1)?
                             wPath.webinosPath()+"Pzh" :wPath.webinosPath();
-        require("./webinosId.js").fetchWebinosName(webinosType, inputConfig, function (webinosName) {
-            CurrentContext.metaData.webinosName = webinosName;
-            CurrentContext.metaData.webinosRoot = (webinosType.search("Pzh") !== -1)?
-                                                (webinos_root + "/" + webinosName): webinos_root;
-            CurrentContext.metaData.serverName = (inputConfig && inputConfig.sessionIdentity) || "0.0.0.0";
-        });
+        try {
+            require("./webinosId.js").fetchWebinosName(webinosType, inputConfig, function (webinosName) {
+                ConfigContext.metaData.webinosName = webinosName;
+                ConfigContext.metaData.webinosRoot = (webinosType.search("Pzh") !== -1)?
+                                                    (webinos_root + "/" + webinosName): webinos_root;
+                ConfigContext.metaData.serverName = (inputConfig && inputConfig.sessionIdentity) || "0.0.0.0";
+            });
+        } catch(err) {
+            ConfigContext.emit("EXCEPTION", "failed setting webinos id", err);
+        }
         // UserData should be present for certificate creation
         // Note this value will be overwritten if configuration exists
-        var key, defaultCert = require("../../../../webinos_config.json");
-        for(key in defaultCert.certConfiguration) {
-            if (defaultCert.certConfiguration.hasOwnProperty(key)) CurrentContext.userData[key] = defaultCert.certConfiguration[key];
+        try {
+            var key,
+            webinosConfigValue = require("../../../../webinos_config.json");
+            for(key in webinosConfigValue.certConfiguration) {
+                if (webinosConfigValue.certConfiguration.hasOwnProperty(key)) 
+                    ConfigContext.userData[key] = webinosConfigValue.certConfiguration[key];
+            }
+        } catch(err) {
+            ConfigContext.emit("EXCEPTION", "failed reading webinos default configuration");
         }
-    }
-
-    setWebinosRoot(); // Need to run this by default
+        ConfigContext.cert = new Certificate(ConfigContext.metaData.webinosType, ConfigContext.metaData.webinosRoot, 
+                                            ConfigContext.metaData.webinosName, ConfigContext.metaData.serverName);
+        ConfigContext.fileList = [{folderName: null, fileName: "metaData", object: ConfigContext.metaData},
+            {folderName: null, fileName: "crl", object: ConfigContext.crl},
+            {folderName: null, fileName:"trustedList", object: ConfigContext.trustedList},
+            {folderName: null, fileName:"untrustedList", object: ConfigContext.untrustedCert},
+            {folderName: null, fileName:"exCertList", object: ConfigContext.exCertList},
+            {folderName: path.join("certificates", "internal"),fileName: "certificates", object: ConfigContext.cert.internal},
+            {folderName: path.join("certificates", "external"),fileName: "certificates", object: ConfigContext.cert.external},
+            {folderName:"userData", fileName: "userDetails", object: ConfigContext.userData},
+            {folderName:"userData", fileName:"serviceCache", object: ConfigContext.serviceCache},
+            {folderName:"userData", fileName:"userPref", object: ConfigContext.userPref}];
+    }    
     /**
      * Store first time configuration details in above folder and files
      */
     function storeAll() {
-        CurrentContext.fileList.forEach (function (name) {
+        ConfigContext.fileList.forEach (function (name) {
             if (typeof name === "object") {
                 if(name.folderName === "userData") {
                     if (name.fileName === "userDetails") {
-                        name.object = CurrentContext.userData;
+                        name.object = ConfigContext.userData;
                     }
                     if (name.fileName === "serviceCache") {
-                        name.object = CurrentContext.serviceCache;
+                        name.object = ConfigContext.serviceCache;
                     }
                 }
-                CurrentContext.storeDetails(name.folderName, name.fileName, name.object);
+                ConfigContext.storeDetails(name.folderName, name.fileName, name.object);
             }
         });
     }
@@ -106,22 +117,17 @@ function Config(webinosType, inputConfig) {
      * @param {Object} defaultCert - parameters read from webinos_config.json
      */
     function storeUserData(user, defaultCert){
-        var key;
-        CurrentContext.userData = {};
-        for(key in defaultCert) {
-            if (defaultCert.hasOwnProperty(key)) CurrentContext.userData[key] = defaultCert[key];
-        }
-        CurrentContext.userData.name = user.displayName;
-        CurrentContext.userData.email = user.emails;
-        CurrentContext.userData.authenticator = user.from;
-        CurrentContext.userData.identifier = user.identifier;
+        ConfigContext.userData.name = user.displayName;
+        ConfigContext.userData.email = user.emails;
+        ConfigContext.userData.authenticator = user.from;
+        ConfigContext.userData.identifier = user.identifier;
     }
     /**
      * Creates default policy file it not present
      */
     function createPolicyFile() {
         // policy file
-        fs.readFile(path.join (CurrentContext.metaData.webinosRoot, "policies", "policy.xml"), function (err) {
+        fs.readFile(path.join (ConfigContext.metaData.webinosRoot, "policies", "policy.xml"), function (err) {
             if (err && err.code === "ENOENT") {
                 var data;
                 try {
@@ -131,7 +137,7 @@ function Config(webinosType, inputConfig) {
                     logger.error ("Default policy not found");
                     data = "<policy combine=\"first-applicable\" description=\"denyall\">\n<rule effect=\"deny\"></rule>\n</policy>";
                 }
-                fs.writeFileSync(path.join (CurrentContext.metaData.webinosRoot, "policies", "policy.xml"), data);
+                fs.writeFileSync(path.join (ConfigContext.metaData.webinosRoot, "policies", "policy.xml"), data);
             }
         });
     }
@@ -141,19 +147,19 @@ function Config(webinosType, inputConfig) {
      */
     function setFriendlyName(friendlyName) {
         if(friendlyName) {
-            CurrentContext.metaData.friendlyName = friendlyName;
+            ConfigContext.metaData.friendlyName = friendlyName;
         } else {
             var os = require("os");
             if (os.platform() && os.platform().toLowerCase() === "android" ){
-                CurrentContext.metaData.friendlyName = "Mobile";
+                ConfigContext.metaData.friendlyName = "Mobile";
             } else if (process.platform === "win32") {
-                CurrentContext.metaData.friendlyName = "Windows PC";
+                ConfigContext.metaData.friendlyName = "Windows PC";
             } else if (process.platform === "darwin") {
-                CurrentContext.metaData.friendlyName = "MacBook";
+                ConfigContext.metaData.friendlyName = "MacBook";
             } else if (process.platform === "linux" || process.platform === "freebsd") {
-                CurrentContext.metaData.friendlyName = "Linux Device";
+                ConfigContext.metaData.friendlyName = "Linux Device";
             } else {
-                CurrentContext.metaData.friendlyName = "Webinos Device";// Add manually
+                ConfigContext.metaData.friendlyName = "Webinos Device";// Add manually
             }
         }
     }
@@ -186,15 +192,14 @@ function Config(webinosType, inputConfig) {
      * @param {String} fileName - fileName (ServiceCache or userPref) that has been updated
      * @param {Object} config - updated configuration details
      */
-    function writeFile(fileName, config, callback) {
+    function updateWebinosConfigFile(fileName, config, callback) {
         try {
             var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
             fs.writeFileSync(filePath, JSON.stringify(config, null, "  "));
             logger.log("updated webinos config with details related to "+ fileName);
-            if(callback) callback(true);
+            if(callback) callback(true);            
         } catch (err) {
-            if(callback) callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos_config write failed"});
+            ConfigContext.on("EXCEPTION", "webinos_config write failed", err});
         }
     }
     /**
@@ -203,24 +208,21 @@ function Config(webinosType, inputConfig) {
      */
     function updateWebinosConfig(fileName, callback) {
         try {
-            var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
-            var config = require(filePath);
             if (fileName === "serviceCache") {
-               if (CurrentContext.metaData.webinosType === "Pzh" &&
-                   config.pzhDefaultServices.length !== CurrentContext.serviceCache.length) {
-                   config.pzhDefaultServices = CurrentContext.serviceCache;
-               } else if (CurrentContext.metaData.webinosType === "Pzp" &&
-                          config.pzpDefaultServices.length !== CurrentContext.serviceCache.length) {
-                   config.pzpDefaultServices = CurrentContext.serviceCache;
+               if (ConfigContext.metaData.webinosType === "Pzh" &&
+                   defaultConfig.pzhDefaultServices.length !== ConfigContext.serviceCache.length) {
+                   defaultConfig.pzhDefaultServices = ConfigContext.serviceCache;
+               } else if (ConfigContext.metaData.webinosType === "Pzp" &&
+                          config.pzpDefaultServices.length !== ConfigContext.serviceCache.length) {
+                   config.pzpDefaultServices = ConfigContext.serviceCache;
                }
-               writeFile(fileName, config, callback);
-            } else if (fileName === "userPref" && !compareObjects(config.ports, CurrentContext.userPref.ports)) {
-                config.ports = CurrentContext.userPref.ports;
-                writeFile(fileName, config, callback);
+               updateWebinosConfigFile(fileName, config, callback);
+            } else if (fileName === "userPref" && !compareObjects(config.ports, ConfigContext.userPref.ports)) {
+                config.ports = ConfigContext.userPref.ports;
+                updateWebinosConfigFile(fileName, config, callback);
             }
         } catch(err) {
-            if(callback) callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos_config update failed"});
+            ConfigContext.emit("EXCEPTION", "webinos_config update failed", err});
         }
     }
     /**
@@ -231,27 +233,26 @@ function Config(webinosType, inputConfig) {
         try {
             var filePath = path.resolve (__dirname, "../../../../webinos_config.json");
             var config = require(filePath), key;
-            if (!compareObjects(config.webinos_version, CurrentContext.metaData.webinos_version)) {
-                CurrentContext.metaData.webinos_version = config.webinos_version;
-                CurrentContext.storeDetails(null, "metaData", CurrentContext.metaData);
+            if (!compareObjects(config.webinos_version, ConfigContext.metaData.webinos_version)) {
+                ConfigContext.metaData.webinos_version = config.webinos_version;
+                ConfigContext.storeDetails(null, "metaData", ConfigContext.metaData);
             }
-            if (!compareObjects(config.ports, CurrentContext.userPref.ports)) {
-                CurrentContext.userPref.ports = config.ports;
-                CurrentContext.storeDetails("userData", "userPref", CurrentContext.userPref);
+            if (!compareObjects(config.ports, ConfigContext.userPref.ports)) {
+                ConfigContext.userPref.ports = config.ports;
+                ConfigContext.storeDetails("userData", "userPref", ConfigContext.userPref);
             }
-            if (CurrentContext.metaData.webinosType === "Pzh" && config.pzhDefaultServices.length !== CurrentContext.serviceCache.length) {
-                CurrentContext.serviceCache = config.pzhDefaultServices;
-                CurrentContext.storeDetails("userData", "serviceCache", CurrentContext.serviceCache);
-            } else if (CurrentContext.metaData.webinosType === "Pzp" && config.pzpDefaultServices.length !== CurrentContext.serviceCache.length) {
-                CurrentContext.serviceCache = config.pzpDefaultServices;
-                CurrentContext.storeDetails("userData", "serviceCache", CurrentContext.serviceCache);
+            if (ConfigContext.metaData.webinosType === "Pzh" && config.pzhDefaultServices.length !== ConfigContext.serviceCache.length) {
+                ConfigContext.serviceCache = config.pzhDefaultServices;
+                ConfigContext.storeDetails("userData", "serviceCache", ConfigContext.serviceCache);
+            } else if (ConfigContext.metaData.webinosType === "Pzp" && config.pzpDefaultServices.length !== ConfigContext.serviceCache.length) {
+                ConfigContext.serviceCache = config.pzpDefaultServices;
+                ConfigContext.storeDetails("userData", "serviceCache", ConfigContext.serviceCache);
             }
-            if (CurrentContext.metaData.webinosType === "Pzp" && config.friendlyName !== "") {
+            if (ConfigContext.metaData.webinosType === "Pzp" && config.friendlyName !== "") {
                 setFriendlyName(config.friendlyName);
             }
         } catch(err) {
-            if(callback)  callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos_config check update failed"});
+            ConfigContext.emit("EXCEPTION", "webinos_config check update failed", err});
         }
     }
     /**
@@ -267,31 +268,28 @@ function Config(webinosType, inputConfig) {
      */
     function fetchDefaultWebinosConfiguration(callback) {
         try {
-            var filePath = path.resolve (__dirname, "../../../../webinos_config.json"), webinos_root;
-            if (createDefaultDirectories(CurrentContext.metaData.webinosType)) {
-                logger.log ("created default webinos directories at location : " + CurrentContext.metaData.webinosRoot);
-                var defaultConfig = require(filePath);
-                CurrentContext.metaData.webinos_version = defaultConfig.webinos_version;
-                CurrentContext.userPref.ports = defaultConfig.ports;
-                CurrentContext.userData = defaultConfig.certConfiguration;
-                if(inputConfig && inputConfig.user)  storeUserData(inputConfig.user, defaultConfig.certConfiguration);
-                setFriendlyName((inputConfig && inputConfig.friendlyName) || defaultConfig.friendlyName);
-                if (CurrentContext.metaData.webinosType === "Pzh" || CurrentContext.metaData.webinosType === "PzhCA") {
-                    CurrentContext.serviceCache = defaultConfig.pzhDefaultServices.slice(0);
-                    CurrentContext.metaData.friendlyName = CurrentContext.userData.name +" ("+ CurrentContext.userData.authenticator + ")";
-                } else if (CurrentContext.metaData.webinosType === "Pzp" || CurrentContext.metaData.webinosType === "PzpCA") {
-                    CurrentContext.serviceCache = defaultConfig.pzpDefaultServices.slice(0);
+            var webinos_root;
+            if (createDefaultDirectories(ConfigContext.metaData.webinosType)) {
+                logger.log ("created default webinos directories at location : " + ConfigContext.metaData.webinosRoot);
+                ConfigContext.metaData.webinos_version = webinosConfigValue.webinos_version;
+                ConfigContext.userPref.ports = webinosConfigValue.ports;
+                ConfigContext.userData = webinosConfigValue.certConfiguration;
+                if(inputConfig && inputConfig.user)  storeUserData(inputConfig.user, webinosConfigValue.certConfiguration);
+                setFriendlyName((inputConfig && inputConfig.friendlyName) || webinosConfigValue.friendlyName);
+                if (ConfigContext.metaData.webinosType === "Pzh" || ConfigContext.metaData.webinosType === "PzhCA") {
+                    ConfigContext.serviceCache = webinosConfigValue.pzhDefaultServices.slice(0);
+                    ConfigContext.metaData.friendlyName = ConfigContext.userData.name +" ("+ ConfigContext.userData.authenticator + ")";
+                } else if (ConfigContext.metaData.webinosType === "Pzp" || ConfigContext.metaData.webinosType === "PzpCA") {
+                    ConfigContext.serviceCache = webinosConfigValue.pzpDefaultServices.slice(0);
                 }
                 createPolicyFile();
                 storeAll();
                 if(callback) callback (true);
             } else {
-                if(callback) callback (false, {"Component": "WebinosConfiguration","Type": "FUNC_ERROR", "Error": err,
-                    "Message": "webinos default directory creation failed"});
+                ConfigContext.emit("FUNC_ERROR",  "webinos default directory creation failed", err});
             }
         } catch (err){
-            if(callback) callback (false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos fetching default configuration failed"});
+            ConfigContext.emit("EXCEPTION",  "webinos fetching default configuration failed", err});            
         }
     }
     //End of webinos_config.json read, write or update functionality\\
@@ -303,34 +301,34 @@ function Config(webinosType, inputConfig) {
     function createDefaultDirectories() {
         try {
             var permission = "0744";
-            var webinos_root =  (CurrentContext.metaData.webinosType.search("Pzh") !== -1)?
+            var webinos_root =  (ConfigContext.metaData.webinosType.search("Pzh") !== -1)?
                                 wPath.webinosPath()+"Pzh" :wPath.webinosPath();
             //If the main folder doesn't exist
             if (!existsSync (webinos_root)) {
                 fs.mkdirSync (webinos_root, permission);
             }
             // If the user folder does not exist in webinosPzh.
-            if (CurrentContext.metaData.webinosType.search("Pzh") !== -1 &&
-            !existsSync (CurrentContext.metaData.webinosRoot)){
-                fs.mkdirSync (CurrentContext.metaData.webinosRoot, permission);
+            if (ConfigContext.metaData.webinosType.search("Pzh") !== -1 &&
+            !existsSync (ConfigContext.metaData.webinosRoot)){
+                fs.mkdirSync (ConfigContext.metaData.webinosRoot, permission);
             }
             // webinos root was created, we need the following 1st level dirs
-            var list = [ path.join (CurrentContext.metaData.webinosRoot, "logs"),
+            var list = [ path.join (ConfigContext.metaData.webinosRoot, "logs"),
                 path.join (webinos_root, "wrt"),
-                path.join (CurrentContext.metaData.webinosRoot, "certificates"),
-                path.join (CurrentContext.metaData.webinosRoot, "policies"),
-                path.join (CurrentContext.metaData.webinosRoot, "wrt"),
-                path.join (CurrentContext.metaData.webinosRoot, "userData"),
-                path.join (CurrentContext.metaData.webinosRoot, "keys"),
-                path.join (CurrentContext.metaData.webinosRoot, "certificates", "external"),
-                path.join (CurrentContext.metaData.webinosRoot, "certificates", "internal")];
+                path.join (ConfigContext.metaData.webinosRoot, "certificates"),
+                path.join (ConfigContext.metaData.webinosRoot, "policies"),
+                path.join (ConfigContext.metaData.webinosRoot, "wrt"),
+                path.join (ConfigContext.metaData.webinosRoot, "userData"),
+                path.join (ConfigContext.metaData.webinosRoot, "keys"),
+                path.join (ConfigContext.metaData.webinosRoot, "certificates", "external"),
+                path.join (ConfigContext.metaData.webinosRoot, "certificates", "internal")];
             list.forEach (function (name) {
                 if (!existsSync (name)) fs.mkdirSync (name, permission);
             });
             // Notify that we are done
             return true;
         } catch (err) {
-            logger.error("Failed in creating default webinos directories - " + require("util").inspect(err));
+            ConfigContext.emit("EXCEPTION", "Failed in creating default directories", err);            
             return false;
         }
     }
@@ -346,43 +344,42 @@ function Config(webinosType, inputConfig) {
         try {
             fetchDefaultWebinosConfiguration(function (status, errMsg) {
                 if (status) {
-                    var cn = CurrentContext.metaData.webinosType + "CA:" + CurrentContext.metaData.webinosName;
-                    CurrentContext.generateCurrentContextSignedCertificate (CurrentContext.metaData.webinosType+"CA", cn,
+                    var cn = ConfigContext.metaData.webinosType + "CA:" + ConfigContext.metaData.webinosName;
+                    ConfigContext.generateSelfSignedCertificate (ConfigContext.metaData.webinosType+"CA", cn,
                     function (status, value) {
                         if (!status) {
-                            if (callback) callback (false, value); // value is set in generateCurrentContextSignedCertificate
+                            if (callback) callback (false, value); // value is set in generateConfigContextSignedCertificate
                         } else {
                             logger.log ("*****master certificate generated*****");
-                            cn = CurrentContext.metaData.webinosType + ":" + CurrentContext.metaData.webinosName;
-                            CurrentContext.generateCurrentContextSignedCertificate (CurrentContext.metaData.webinosType,
+                            cn = ConfigContext.metaData.webinosType + ":" + ConfigContext.metaData.webinosName;
+                            ConfigContext.generateSelfSignedCertificate (ConfigContext.metaData.webinosType,
                             cn, function (status, csr) { // Master Certificate
                                 if (status) {
                                     logger.log ("*****connection certificate generated*****");
-                                    CurrentContext.generateSignedCertificate(csr, function (status, signedCert) {
+                                    ConfigContext.generateSignedCertificate(csr, function (status, signedCert) {
                                         if (status) {
                                             logger.log ("*****connection certificate signed by master certificate*****");
-                                            CurrentContext.cert.internal.conn.cert = signedCert;
-                                            CurrentContext.storeDetails(path.join("certificates", "internal"),
-                                            "certificates", CurrentContext.cert.internal);
-                                            CurrentContext.storeDetails(null, "crl", CurrentContext.crl);
+                                            ConfigContext.cert.internal.conn.cert = signedCert;
+                                            ConfigContext.storeDetails(path.join("certificates", "internal"),
+                                            "certificates", ConfigContext.cert.internal);
+                                            ConfigContext.storeDetails(null, "crl", ConfigContext.crl);
                                             if (callback) callback(true);
                                         } else {
-                                            if (callback) callback(false, signedCert);//signedCert is a error set in generateSignedCertificate
+                                            ConfigContext.emit("FUNC_ERROR", "Failed signing certificate", signedCert); 
                                         }
                                     });
                                 } else {
-                                    if (callback) callback (false, csr);// csr is set in generateCurrentContextSignedCertificate
+                                    ConfigContext.emit("FUNC_ERROR", "Failed signing certificate", csr); // csr is set in generateConfigContextSignedCertificate
                                 }
                             });
                         }
                     });
                 } else {
-                    if (callback) callback (false, errMsg);
+                    ConfigContext.emit("EXCEPTION", "webinos configuration data is corrupted considering it is corrupted", err);
                 }
             });
         } catch (err) {
-            if (callback) callback (false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos new configuration setting failed"});
+            ConfigContext.emit("EXCEPTION", "webinos new configuration setting failed", err);
         }
     }
     /**
@@ -393,11 +390,11 @@ function Config(webinosType, inputConfig) {
     function checkConfigExists(callback) {
         try {
             var name, i;
-            if (CurrentContext.metaData.webinosRoot) {
-                for (i = 0; i < CurrentContext.fileList.length; i = i + 1) {
-                    name = CurrentContext.fileList[i];
+            if (ConfigContext.metaData.webinosRoot) {
+                for (i = 0; i < ConfigContext.fileList.length; i = i + 1) {
+                    name = ConfigContext.fileList[i];
                     var fileName = (name.fileName !== null) ? (name.fileName+".json"):(webinosName +".json");
-                    var filePath = path.join (CurrentContext.metaData.webinosRoot, name.folderName, fileName);
+                    var filePath = path.join (ConfigContext.metaData.webinosRoot, name.folderName, fileName);
                     if( !existsSync(filePath)){
                         callback(false); // This triggers createNewConfiguration
                         return;
@@ -405,16 +402,15 @@ function Config(webinosType, inputConfig) {
                 }
                 callback(true);
             } else {
-                callback(false,{"Component": "WebinosConfiguration","Type": "FUNC_ERROR", "Error": err,
-                    "Message": "setting webinos root failed"});
+                ConfigContext.emit("FUNC_ERROR", "setting webinos root failed", err);
             }
         } catch (err) {
-            callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "checking of webinos configuration failed"});
+            ConfigContext.emit("EXCEPTION", "checking of webinos configuration failed", err);            
         }
     }
     /**
-     * This is a public function that gets triggered by PZH/PZP/PZHP
+     * This is a public function that gets triggered by PZH/PZP/PZHP to fetch existing configuration
+     * or load old configuration.
      * Create or Load webinos configuration
      * @param {Function} callback - to return status (true/false) and in case of error, error details
      */
@@ -422,20 +418,17 @@ function Config(webinosType, inputConfig) {
         try {
             checkConfigExists(function(status, errMsg) {
                 if(status) {
-                    CurrentContext.fileList.forEach(function(name){
-                        CurrentContext.fetchDetails(name.folderName, name.fileName, name.object);
+                    ConfigContext.fileList.forEach(function(name){
+                        ConfigContext.fetchDetails(name.folderName, name.fileName, name.object);
                     });
                     checkDefaultValues(callback);
                     callback(true);
-                } else if(errMsg){
-                    callback(false, errMsg);
                 } else {
                     createNewConfiguration(callback);
                 }
             });
         } catch (err) {
-            callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos configuration load/create failed"});
+            ConfigContext.emit("EXCEPTION", "webinos configuration load/create failed", err);
         }
     };
     /**
@@ -444,12 +437,13 @@ function Config(webinosType, inputConfig) {
      * @param {String} name - name of the file
      */
     this.storeKeys = function (keys, name) {
-        var filePath = path.join(CurrentContext.metaData.webinosRoot, "keys", name+".pem");
+        var filePath = 
+        path.join(ConfigContext.metaData.webinosRoot, "keys", name+".pem");
         try {
             fs.writeFileSync(path.resolve(filePath), keys);
             logger.log("saved " + name +".pem");
             //calling get hash
-            // CurrentContext.getKeyHash(filePath);
+            // ConfigContext.getKeyHash(filePath);
             return true;
         } catch (err) {
             return false;
@@ -463,7 +457,7 @@ function Config(webinosType, inputConfig) {
      * @param {Function} callback - returns callback with status true if saveor else false if it fails
      */
     this.storeDetails = function(folderName, fileName, data, callback) {
-        var filePath = path.join (CurrentContext.metaData.webinosRoot, folderName, fileName+".json");
+        var filePath = path.join (ConfigContext.metaData.webinosRoot, folderName, fileName+".json");
         try {
             if (typeof data === "object") {
                 fs.writeFileSync(path.resolve(filePath), JSON.stringify (data, null, " "));
@@ -474,12 +468,10 @@ function Config(webinosType, inputConfig) {
                     callback(true);
                 }
             } else {
-                if(callback) callback(false, {"Component": "WebinosConfiguration","Type": "WRITE", "Error": err,
-                    "Message": "Data permitted to store should be an object"});
+                ConfigContext.emit("WRITE", "Object to store is empty should be am object", err);
             }
         } catch(err) {
-            if (callback) callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message": "webinos configuration store in " + filePath+ " failed"});
+            ConfigContext.emit("EXCEPTION", "webinos configuration store in " + filePath+ " failed", err);
         }
     };
     /**
@@ -490,7 +482,7 @@ function Config(webinosType, inputConfig) {
      * @param {Function} callback - returns true if successful in reading else false
      */
     this.fetchDetails = function(folderName, fileName, assignValue, callback) {
-        var filePath = path.join(CurrentContext.metaData.webinosRoot, folderName, fileName+".json");
+        var filePath = path.join(ConfigContext.metaData.webinosRoot, folderName, fileName+".json");
         try {
             var data = fs.readFileSync(path.resolve(filePath));
             var dataString = data.toString();
@@ -501,18 +493,17 @@ function Config(webinosType, inputConfig) {
                 }
                 return true;
             } else {
-                if(callback) callback(false, {"Component": "WebinosConfiguration","Type": "READ", "Error": err,
-                    "Message":  "webinos configuration data is empty in the file, considering it is corrupted"});
+                ConfigContext.emit("READ", "webinos configuration data is empty in the file, considering it is corrupted", err);
             }
         } catch(error) {
-            if(callback) callback(false, {"Component": "WebinosConfiguration","Type": "EXCEPTION", "Error": err,
-                "Message":  "webinos configuration data is corrupted considering it is corrupted"});
+            ConfigContext.emit("EXCEPTION", "webinos configuration data is corrupted considering it is corrupted", err);
             logger.log("since webinos data is corrupted, it will not start correctly");
             logger.log("triggering webinos configuration again");
-            createNewConfiguration(callback);
+            ConfigContext.createOrLoadWebinosConfiguration(callback);
         }
     };
+    initializeConfigContext(); // Need to run this by default
 }
 
-require("util").inherits (Config, certificate);
+Config.prototype.__proto__ = require("events").EventEmitter.prototype;
 module.exports = Config;

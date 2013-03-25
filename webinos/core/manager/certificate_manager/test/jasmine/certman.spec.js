@@ -121,24 +121,25 @@ describe("Proper error handling", function() {
     });
 });    
 
-describe("get hash", function() {
+/*describe("get hash", function() {
     it("can get hash of public certificate", function() {
         var path = require("path").join(__dirname,"../conn.pem");
         var hash = certman.getHash(path);
         expect(hash).not.toBeNull();
         expect(hash).not.toEqual([]);
     });
-});
+});*/
 
 var CertificateManager = require("../../lib/certificate");
-var WebinosPath = require("../../../../util/lib/webinosPath");c
-var webinosName ´= "WebinosPZP";
-var CertificateManagerInstance = new CertificateManager("Pzp", WebinosPath.webinosPath(), webinosName, "0.0.0.0");
+var WebinosPath = require("../../../../util/lib/webinosPath");
+var webinosName = "WebinosPZP";
+var certConfig = require("../../../../../../webinos_config.json");
+var CertificateManagerInstance = new CertificateManager("Pzp", WebinosPath.webinosPath(), webinosName, "0.0.0.0", certConfig.certConfiguration);
 
 describe("CertificateManager Server JS tests", function() {
     it("generates server private key, csr, self signed certificate and crl", function() {
         var cn ="PzpCA:" +  webinosName;
-        CertificateManagerInstance.generateSelfSignedCertificate("PzpCA", cn, function(status, csr){
+        CertificateManagerInstance.generateSelfSignedCertificate("PzpCA", cn, function(status, csr) {
             expect(status).toBeTruthy();
             expect(csr).toEqual(undefined);
             expect(CertificateManagerInstance.cert.internal.master.cert).toContain(CERT_START);
@@ -148,18 +149,17 @@ describe("CertificateManager Server JS tests", function() {
             expect(CertificateManagerInstance.cert.internal.master.key_id).toEqual(webinosName + "_master");
         });
     });
-});
-
-//Certificate manager JS calls
-describe("CertificateManager Client JS tests", function() {
+    var cn ="Pzp:" + webinosName, csr, cert;
     it("generate client private key, csr, self signed certificate and crl", function() {
-        var cn ="Pzp:" + webinosName;
         // PZP should return back csr
         expect(CertificateManagerInstance.cert.internal.master.cert).not.toBeNull();
-        expect(CertificateManagerInstance.cert.internal.master.cert).toContain(CERT_START);
-        expect(CertificateManagerInstance.cert.internal.master.cert).toContain(CERT_END);
+//        expect(CertificateManagerInstance.cert.internal.master.cert).toContain(CERT_START);
+//        expect(CertificateManagerInstance.cert.internal.master.cert).toContain(CERT_END);
         expect(CertificateManagerInstance.crl).not.toBeNull({ });
-        CertificateManagerInstance.generateSelfSignedCertificate("Pzp", cn, function(status, csr){
+    });
+    it("generate connection certificate", function() {
+        CertificateManagerInstance.generateSelfSignedCertificate("Pzp", cn, function(status, csr_){
+            csr = csr_;
             expect(status).toBeTruthy();
             expect(csr).not.toBeNull();
             expect(csr).not.toEqual("");
@@ -168,58 +168,42 @@ describe("CertificateManager Client JS tests", function() {
             expect(CertificateManagerInstance.cert.internal.conn.cert ).toContain(CERT_START);
             expect(CertificateManagerInstance.cert.internal.conn.cert).toContain(CERT_END);
             expect(CertificateManagerInstance.cert.internal.conn.key_id).toEqual(webinosName + "_conn");
-            // Signed certificate back by PZP
-            CertificateManagerInstance.generateSignedCertificate(csr, function(status, cert) {
-                expect(status).toBeTruthy();
-                expect(cert).not.toBeNull();
-                expect(cert).not.toEqual("");
-                expect(cert).toContain(CERT_START);
-                expect(cert).toContain(CERT_END);
-                // Revoke PZP certificate
-                CertificateManagerInstance.revokeClientCert(cert, function(status, crl) {
-                    expect(status).toBeTruthy();
-                    expect(crl).not.toBeNull();
-                    expect(crl).not.toEqual("");
-                    expect(crl).toContain(CRL_START);
-                    expect(crl).toContain(CRL_END);
-                });
-            });
         });
-
+    });
+    it("signed connection certificate by the master certificate", function() { // Signed certificate back by PZP
+        CertificateManagerInstance.generateSignedCertificate(csr, function(status, cert_) {
+            cert = cert_;
+            expect(status).toBeTruthy();
+            expect(cert).not.toBeNull();
+            expect(cert).not.toEqual("");
+            expect(cert).toContain(CERT_START);
+            expect(cert).toContain(CERT_END);
+        });
+    });
+    it("revoke PZP certificate", function() {// Revoke PZP certificate
+        CertificateManagerInstance.revokeClientCert(cert, function(status, crl) {
+            expect(status).toBeTruthy();
+            expect(crl).not.toBeNull();
+            expect(crl).not.toEqual("");
+            expect(crl).toContain(CRL_START);
+            expect(crl).toContain(CRL_END);
+        });
     });
 });
 
 describe("CertificateManager Negative JS tests", function() {
-    it("Trigger error in CSR", function() {
-        CertificateManagerInstance.generateSelfSignedCertificate("Pzp", "", function(status, errMsg){
-            expect(status).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("CertificateManager");
-            expect(errMsg.Type).toEqual("FUNC_ERROR");
-            expect(errMsg.Message).toEqual("failed generating CSR. user details are missing");
-        });
+    CertificateManagerInstance.on("FUNC_ERROR", function(errText, err) {
+        expect(errText).not.toBeNull();
+        if(errText === "failed generating CSR. user details are missing" ||
+            errText === "failed signing client certificate") ;
+        else throw "functionality error " + err;
     });
-    it("Trigger error in self-sign certificate", function() {
-        var serverName = "0.0.0.0";
-        CertificateManagerInstance.metaData.serverName = "";
-        CertificateManagerInstance.generateSelfSignedCertificate("Pzp", "Pzp:"+webinosName, function(status, errMsg){
-            expect(status).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(typeof errMsg).toEqual("object");
-            expect(errMsg.Component).toEqual("CertificateManager");
-            expect(errMsg.Type).toEqual("FUNC_ERROR");
-            expect(errMsg.Message).toEqual("failed self signing certificate");
-            CertificateManagerInstance.metaData.serverName = serverName;
-        });
+
+    it("csr and signed cert error", function() {
+        CertificateManagerInstance.generateSelfSignedCertificate("Pzp", "");
+        CertificateManagerInstance.generateSignedCertificate(undefined);
+
     });
-    it("Trigger error in signing certificate", function() {
-        expect(CertificateManagerInstance.cert.internal.master.key_id).toEqual(webinosName + "_master");
-        CertificateManagerInstance.generateSignedCertificate(undefined, function(status, errMsg) {
-            expect(status).toBeFalsy();
-            expect(errMsg).not.toBeNull();
-            expect(errMsg).not.toEqual("");
-            expect(typeof errMsg).toEqual("object");
-        });
-    });
+
+
 });

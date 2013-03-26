@@ -8,8 +8,8 @@ config_backup_file=""
 prepare_pzh_config(){
 	config_backup_file=$1".bak"
 	cp -f $1 $config_backup_file
-	sed -i 's/\(\s*"provider"\s*:\)\s*[0-9]*,/\16080,/' $1
-	sed -i 's/\(\s*"provider_webServer"\s*:\s*\)[0-9]*,/\16443,/' $1	
+	sed -i 's/\(\s*"provider"\s*:\)\s*[0-9]*,/\1 6080,/' $1
+	sed -i 's/\(\s*"provider_webServer"\s*:\s*\)[0-9]*,/\1 6443,/' $1	
 	echo "webinos_config changed: "
 	head $1
 }

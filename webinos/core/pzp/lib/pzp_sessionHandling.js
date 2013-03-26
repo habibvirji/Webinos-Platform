@@ -459,9 +459,7 @@ function Pzp() {
      * EnrollPZP stores signed certificate information from the PZH and then triggers connectHub function
      * @param from - Contains PZH Id
      * @param to - Contains PZP Id
-     * @param clientCert - Signed PZP certificate from the PZH
-     * @param masterCert - PZH master certificate
-     * @param masterCrl  -  PZH master CRL
+     * @param payload - Signed PZP certificate from the PZH, master certificate and CRL
      */
     this.registerDevice = function (from, to, payload) {
         logger.log ("PZP ENROLLED AT  " + from);    // This message come from PZH web server over websocket
@@ -567,16 +565,44 @@ function Pzp() {
     this.getCertificateToBeSignedByPzh = function() {
         return config.cert.internal.master.csr;
     };
-    process.on("CALLBACK_MISSING", function() {
+    PzpObject.config.on("FUNC_ERROR", function(err, errMsg){
+        PzpObject.emit("FUNC_ERROR", err, errMsg);
+    });
+    PzpObject.config.on("FUNC_ERROR", function(err, errMsg){
+        PzpObject.emit("FUNC_ERROR", err, errMsg);
+    });
+
+    PzpObject.on("FUNC_ERROR", function(err, errMsg){
+        console.log("FUNC_ERROR");
+        console.log(err);
+        console.log(errMsg);
+    });
+    PzpObject.on("EXCEPTION", function(err, errMsg){
+        console.log("EXCEPTION");
+        console.log(err);
+        console.log(errMsg);
+    });
+    PzpObject.on("WRITE", function(err, errMsg){
+        console.log("WRITE");
+        console.log(err);
+        console.log(errMsg);
+    });
+    PzpObject.on("READ", function(err, errMsg){
+        console.log("READ");
+        console.log(err);
+        console.log(errMsg);
 
     });
-    process.on("PARAM_WRONG", function() {
+    PzpObject.on("CLEANUP", function(err, errMsg){
+        console.log("READ");
+        console.log(err);
+        console.log(errMsg);
 
     });
-
 };
-
 require("util").inherits(Pzp, PzpWebSocket);
+Pzp.prototype.__proto__ = require("events").EventEmitter.prototype;
+
 var PzpAPI = exports;
 var pzpInstance = undefined;
 PzpAPI.getInstance = function() {

@@ -18,7 +18,7 @@
  * AUTHORS: Habib Virji (habib.virji@samsung.com), Alexander Futasz, Ziran Sun(ziran.sun@samsung.com)
  *******************************************************************************/
 var PzpWebSocket = require("./pzp_websocket.js");
-function Pzp() {
+function Pzp(inputConfig) {
     "use strict";
     PzpWebSocket.call(this);
     var PzpCommon = require("./pzp.js");
@@ -80,42 +80,16 @@ function Pzp() {
             }
         });
     };
-
-    /**
-     *
-     */
-    this.sendUpdateToAll = function() {
-        function getConnectedList(type) {
-            var connList=[],key, list = (type === "pzp") ? pzpState.connectedPzp: pzpState.connectedPzh;
-            for (key in list) {
-                if (list.hasOwnProperty(key)) {
-                    connList.push({friendlyName: list[key].friendlyName, key: key});
-                }
-            }
-            return connList;
-        }
-        var key,msg, payload = {friendlyName: config.metaData.friendlyName, connectedPzp: getConnectedList("pzp"),
-            connectedPzh: getConnectedList("pzh")};
-        for (key in pzpState.connectedPzp) {
-            if (pzpState.connectedPzp.hasOwnProperty(key)) {
-                PzpObject.prepMsg(key, "update", payload);
-            }
-        }
-        if (pzpState.enrolled) {
-            PzpObject.prepMsg(config.metaData.pzhId, "update", payload);
-        }
-    };
     /**
      * Changes friendly name of the PZP
      * @param {String} name - PZP friendly name intended to be changed
      */
     this.setFriendlyName = function(name) {
+        if (!name) PzpObject.emit("PARAM_MISSING","Name to change PZP friendly name is missing");
         if (name) {
             config.metaData.friendlyName = name;
             config.storeDetails(null, "metaData", config.metaData);
             PzpObject.sendUpdateToAll();
-        } else {
-            logger.error("Failed setting friendly name of the pzp");
         }
     };
     /**
@@ -146,91 +120,235 @@ function Pzp() {
     this.getSessionId = function () {
         return pzpState.sessionId;
     };
-    
+
+    /**
+     *
+     * @param id
+     */
+    this.setPzhId = function (id) {
+        config.metaData.pzhId =  id;
+    };
+
+    /**
+     *
+     * @return {*}
+     */
     this.getPzhId = function () {
         return config.metaData.pzhId;
     };
+
+    /**
+     *
+     * @param value
+     */
     this.setExternalCertificate = function(value){
         config.exCertList.exPZP = value;
     };
+
+    /**
+     *
+     * @return {*}
+     */
     this.getExternalCertificate = function(){
         return config.exCertList.exPZP;
     };
+
+    /**
+     *
+     * @param clientSessionId
+     * @param conn
+     */
     this.setConnectedPzp = function(clientSessionId, conn) {
         if (clientSessionId && conn) {
+            // If PZP with same id is already connected, disconnect socket
             if (pzpState.connectedPzp.hasOwnProperty(clientSessionId)) {
                 pzpState.connectedPzp[clientSessionId].socket.end();
             }
             pzpState.connectedPzp[clientSessionId] = conn;
             conn.id = clientSessionId;
         } else {
-            logger.error("connected pzp parameters id or socket are not correct");
+            PzpObject.emit("PARAM_MISSING", "Parameters missing");
         }
     };
+    /**
+     *
+     * @return {*}
+     */
     this.getConnectedPzp = function() {
         return pzpState.connectedPzp;
     };
+    /**
+     *
+     * @return {*}
+     */
     this.getConnectedPzh = function() {
         return pzpState.connectedPzh;
     };
-    this.getPorts = function() {
-        return config.userPref.ports;
-    };
-    this.getWebinosVersion = function() {
-        return config.metaData.webinos_version;
-    };
-    this.getDeviceName = function() {
-        return config.metaData.webinosName;
-    };
+
+    /**
+     *
+     * @return {*}
+     */
     this.getState = function(){
         return pzpState.state;
     };
+
+    /**
+     *
+     * @return {Boolean}
+     */
     this.getEnrolledStatus = function(){
         return pzpState.enrolled;
     };
+
+    /**
+     *
+     * @return {*}
+     */
     this.getPzhConnectedDevices = function() {
         return pzpState.connectedDevicesToPzh;
     };
+
+    /**
+     *
+     * @return {*}
+     */
     this.getConnectPeerAddress = function() {
         return pzpState.connectingPeerAddr;
     };
+
+    /**
+     *
+     * @return {*}
+     */
     this.getServerAddress = function() {
         return config.metaData.serverName;
     };
     /**
-     * Sets TLS connection parameters
-     * @param {function} callback - returns TLS configuration parameters
+     *
+     * @return {*}
      */
-    this.setConnectionParameters = function (callback) {
+    this.getPorts = function() {
+        return config.userPref.ports;
+    };
+    /**
+     *
+     * @return {*}
+     */
+    this.getWebinosVersion = function() {
+        return config.metaData.webinos_version;
+    };
+    /**
+     *
+     * @return {*}
+     */
+    this.getDeviceName = function() {
+        return config.metaData && config.metaData.webinosName;
+    };
+    /**
+     *
+     * @return {*}
+     */
+    this.getServiceCache = function() {
+        return config.serviceCache;
+    };
+    /**
+     *
+     * @return {*}
+     */
+    this.getWebinosPath = function() {
+        return config.metaData && config.metaData.webinosRoot ;
+    };
+    /**
+     *
+     * @return {*}
+     */
+    this.getCertificateToBeSignedByPzh = function() {
+        return config.cert.internal.master.csr;
+    };
+
+
+    /**
+     *
+     * @param clientSessionId
+     * @param conn
+     */
+    this.handlePeerAuthorization = function(clientSessionId, conn) {
+        logger.log ("authorized & connected to PZP: " + clientSessionId);
+        PzpObject.setConnectedPzp(clientSessionId, conn);
+        PzpObject.setConnectState("peer", true);
+        conn.id = clientSessionId;
+
+        var msg = PzpObject.messageHandler.registerSender(PzpObject.getSessionId(), clientSessionId);
+        PzpObject.sendMessage (msg, clientSessionId);
+        PzpObject.sendUpdateToAll();
+        PzpObject.connectedApp();
+
+    };
+
+    /**
+     * PZH connected details are stored in this function
+     * @param conn - connection object of the tls client
+     * @param callback - returns true or false depending on the PZH connected status
+     */
+    this.handlePzhAuthentication = function(conn, callback) {
+        if (!pzpState.connectedPzh.hasOwnProperty(pzpState.sessionId)) {
+            pzpState.connectedPzh[config.metaData.pzhId] = conn;
+            PzpObject.setSessionId();
+            PzpObject.setConnectState("hub", true);
+            conn.id = config.metaData.pzhId;
+            PzpObject.sendUpdateToAll();
+            PzpObject.connectedApp();//updates webinos clients
+            PzpObject.startServer();
+            PzpObject.startOtherManagers();
+            if (callback) callback (true, "pzp " + pzpState.sessionId + " connected to " + config.metaData.pzhId);
+        } else {
+            if (callback) callback (false, "pzh already connected");
+        }
+    };
+
+    /**
+     * @param conn - Socket connection object of the PZH
+     */
+    this.unAuthentication = function(conn) {
+        logger.error("not authenticated " + conn.authorizationError);
+        conn.socket.end();
+        if (conn.authorizationError === 'CERT_NOT_YET_VALID') {
+            throw "possible clock difference between PZH and your PZP, try updating time and try again";
+        } else {
+            throw conn.authorizationError;
+        }
+    };
+    /**
+     * Sets TLS connection parameters
+     */
+    this.setConnectionParameters = function () {
         try {
-            config.fetchKey(config.cert.internal.conn.key_id, function (status, value) {
-                if (status) {
-                    var caList = [], crlList = [], key;
-                    if (pzpState.enrolled) caList.push(config.cert.internal.pzh.cert);
-                    else caList.push(config.cert.internal.master.cert);
-                    crlList.push(config.crl.value );
+            var privateKey;
+            if ((privateKey = config.keyStore.fetchKey(config.cert.internal.conn.key_id))) {
+                var caList = [], crlList = [], key;
+                if (pzpState.enrolled) caList.push(config.cert.internal.pzh.cert);
+                else caList.push(config.cert.internal.master.cert);
+                crlList.push(config.cert.crl.value );
 
-                    for ( key in config.cert.external) {
-                        if(config.cert.external.hasOwnProperty(key)) {
-                            caList.push(config.cert.external[key].cert);
-                            crlList.push(config.cert.external[key].crl);
-                        }
+                for ( key in config.cert.external) {
+                    if(config.cert.external.hasOwnProperty(key)) {
+                        caList.push(config.cert.external[key].cert);
+                        crlList.push(config.cert.external[key].crl);
                     }
-                    return callback(true, {
-                        key : value,
-                        cert: config.cert.internal.conn.cert,
-                        crl : crlList,
-                        ca  : caList,
-                        servername: config.metaData.pzhId || config.metaData.serverName,
-                        rejectUnauthorized: true,
-                        requestCert: true
-                    });
-
-                } else throw "configuration parameter setting error";
-            });
+                }
+                return  {
+                    key : privateKey,
+                    cert: config.cert.internal.conn.cert,
+                    crl : crlList,
+                    ca  : caList,
+                    servername: config.metaData.pzhId || config.metaData.serverName,
+                    rejectUnauthorized: true,
+                    requestCert: true
+                };
+            }
         } catch(err) {
-            logger.error(err);
-            callback(false);
+            PzpObject.emit("EXCEPTION", new Error("Failed Setting TLS Connection Parameters"), err);
         }
     };
 
@@ -269,7 +387,7 @@ function Pzp() {
                     pzpState.connectedPzp[address].pause ();
                     pzpState.connectedPzp[address].write (buf);
                 } catch (err) {
-                    pzpState.logger.error ("exception in sending message to pzp - " + err);
+                    PzpObject.emit("EXCEPTION","exception in sending message to pzp",err);
                 } finally {
                     logger.log ('send to pzp - ' + address + ' message ' + jsonString);
                     pzpState.connectedPzp[address].resume ();
@@ -277,19 +395,19 @@ function Pzp() {
             } else if (pzpState.connectedPzh.hasOwnProperty (address)
                 && pzpState.enrolled && pzpState.state["hub"] === "connected") {
                 try {
-                    pzpState.connectedPzh[address].pause ();
-                    pzpState.connectedPzh[address].write (buf);
+                    pzpState.connectedPzh[address].pause();
+                    pzpState.connectedPzh[address].write(buf);
                 } catch (err) {
-                    pzpState.logger.error ("exception in sending message to pzp - " + err);
+                    PzpObject.emit("EXCEPTION","exception in sending message to pzh",err);
                 } finally {
                     logger.log ('send to hub - ' + address + ' message ' + jsonString);
                     pzpState.connectedPzh[address].resume ();
                 }
             } else { // sending to the app
-                PzpObject.sendConnectedApp (address, message);
+                PzpObject.sendConnectedApp(address, message);
             }
         } else {
-            logger.error ("send message called without message and address field");
+            PzpObject.emit("PARAM_MISSING", "message or address field are missing");
         }
     };
 
@@ -308,6 +426,51 @@ function Pzp() {
             if (pzpState.connectedPzh.hasOwnProperty (key)) PzpObject.prepMsg(key, command, payload);
         }
     };
+
+    /**
+     *
+     */
+    this.sendUpdateToAll = function() {
+        function getConnectedList(type) {
+            var connList=[],key, list = (type === "pzp") ? pzpState.connectedPzp: pzpState.connectedPzh;
+            for (key in list) {
+                if (list.hasOwnProperty(key)) {
+                    connList.push({friendlyName: list[key].friendlyName, key: key});
+                }
+            }
+            return connList;
+        }
+        var key,msg, payload = {friendlyName: config.metaData.friendlyName,
+            connectedPzp: getConnectedList("pzp"),
+            connectedPzh: getConnectedList("pzh")};
+        for (key in pzpState.connectedPzp) {
+            if (pzpState.connectedPzp.hasOwnProperty(key)) {
+                PzpObject.prepMsg(key, "update", payload);
+            }
+        }
+        if (pzpState.enrolled) {
+            PzpObject.prepMsg(config.metaData.pzhId, "update", payload);
+        }
+    };
+
+    /**
+     *
+     * @param conn
+     * @param buffer
+     */
+    this.handleMsg=function (conn, buffer) {
+        try {
+            conn.pause (); // This pauses socket, cannot receive messages
+            PzpCommon.wUtil.webinosMsgProcessing.readJson(PzpObject, buffer, function (obj) {
+                PzpObject.processMsg(obj);
+            });
+        } catch (err) {
+            PzpObject.emit("EXCEPTION", "failed in processing message received", err);
+        } finally {
+            conn.resume ();// unlocks socket.
+        }
+    };
+
     /**
      * Removes pzp or pzh from the connected list and then updatesApp to update status about connection status
      * @param_ id - identity of the PZP or PZH disconnected
@@ -334,76 +497,6 @@ function Pzp() {
             PzpObject.sendUpdateToAll();
             PzpObject.connectedApp();
         }
-    };
-
-    /**
-     *
-     * @param conn
-     * @param buffer
-     */
-    this.handleMsg=function (conn, buffer) {
-        try {
-            conn.pause (); // This pauses socket, cannot receive messages
-            PzpCommon.wUtil.webinosMsgProcessing.readJson(PzpObject, buffer, function (obj) {
-                PzpObject.processMsg(obj);
-            });
-        } catch (err) {
-            logger.error(err);
-        } finally {
-            conn.resume ();// unlocks socket.
-        }
-    };
-
-    /**
-     * Initializes PZP WebSocket Server and then tries connecting with the PZH hub
-     * Starting PZP means starting web socket server
-     * @param inputConfig - the input configuration includes Provider address, authCode and PZH address
-     * @param callback - true or false depending on startup status
-     */
-    this.initializePzp = function (inputConfig, callback) {
-        try {
-            PzpCommon.wUtil.webinosHostname.getHostName(inputConfig.sessionIdentity, function (hostname) {
-                inputConfig.sessionIdentity = hostname;
-                config = new PzpCommon.wUtil.webinosConfiguration("Pzp", "inputConfig");// sets configuration
-                config.createOrLoadWebinosConfiguration(function (status) {
-                    if (status) {
-                        checkMode();   //virgin or hub mode
-                        PzpObject.setSessionId();//sets pzp sessionId
-                        PzpObject.startWSS(callback);
-                    }
-                });
-            });
-        } catch (err) {
-            return callback (false, err);
-        }
-    };
-
-    /**
-     *
-     * @param callback
-     */
-    this.startWSS = function(callback) {
-        PzpObject.startWebSocketServer (function (status, value) {
-            if (status) {
-                PzpObject.initializeRPC_Message(); // Initializes RPC
-                logger.log ("successfully started pzp websocket server ");
-                if (pzpState.enrolled) {
-                    PzpObject.connectHub(function (status, value) {  // connects hub
-                        if (status) {
-                            logger.log(value);
-                        } else {
-                            logger.error("connection to PZH failed ");
-                        }
-                        return callback(status);
-                    });
-                } else {
-                    PzpObject.setupMessage_RPCHandler ();
-                    return callback (true, pzpState.sessionId);  // Virgin mode
-                }
-            } else {
-                throw {Component: "WSS", Error: value};
-            }
-        });
     };
 
     /**
@@ -455,6 +548,7 @@ function Pzp() {
             });
         });
     };
+
     /**
      * EnrollPZP stores signed certificate information from the PZH and then triggers connectHub function
      * @param from - Contains PZH Id
@@ -465,7 +559,7 @@ function Pzp() {
         logger.log ("PZP ENROLLED AT  " + from);    // This message come from PZH web server over websocket
         config.cert.internal.master.cert = payload.clientCert;
         config.cert.internal.pzh.cert    = payload.masterCert;
-        config.crl.value                 = payload.masterCrl;
+        config.cert.crl.value            = payload.masterCrl;
         config.metaData.pzhId            = from;
         config.metaData.serverName       = from && from.split ("_")[0];
         // Same PZP name existed in PZ, PZH has assigned a new id to the PZP.
@@ -490,88 +584,45 @@ function Pzp() {
                 config.storeDetails(require("path").join("certificates", "internal"), "certificates", config.cert.internal);
                 pzpState.enrolled = true; // Moved from Virgin mode to hub mode
 
-                PzpObject.connectHub(function (status) {
-                    if (status) {
-                        logger.log ("successfully connected to the PZH ")
-                    } else {
-                        logger.error ("connection to the PZH unsuccessful")
-                    }
-                });
+                PzpObject.connectHub();
             }
         });
     };
-    this.handlePeerAuthorization = function(clientSessionId, conn) {
-        logger.log ("authorized & connected to PZP: " + clientSessionId);
-        PzpObject.setConnectedPzp(clientSessionId, conn);
-        PzpObject.setConnectState("peer", true);
-        conn.id = clientSessionId;
-
-        var msg = PzpObject.messageHandler.registerSender(PzpObject.getSessionId(), clientSessionId);
-        PzpObject.sendMessage (msg, clientSessionId);
-        PzpObject.sendUpdateToAll();
-        PzpObject.connectedApp();
-
-    };
-    this.handlePzpError = function(err) {
-       if (err.code === "ECONNREFUSED" || err.code === "ECONNRESET") {
-            logger.error ("Connect  attempt to YOUR PZH " + config.metaData.pzhId + " failed.");
-            PzpObject.startOtherManagers ();
-        }
-        logger.error (err);
-    };
 
     /**
-     * PZH connected details are stored in this function
-     * @param conn - connection object of the tls client
-     * @param callback - returns true or false depending on the PZH connected status
+     * Initializes PZP WebSocket Server and then tries connecting with the PZH hub
+     * Starting PZP means starting web socket server
      */
-    this.handlePzhAuthentication = function(conn, callback) {
-        if (!pzpState.connectedPzh.hasOwnProperty(pzpState.sessionId)) {
-            pzpState.connectedPzh[config.metaData.pzhId] = conn;
-            PzpObject.setSessionId();
-            PzpObject.setConnectState("hub", true);
-            conn.id = config.metaData.pzhId;
-            PzpObject.sendUpdateToAll();
-            PzpObject.connectedApp();//updates webinos clients
-            PzpObject.startServer();
-            PzpObject.startOtherManagers();
-            if (callback) callback (true, "pzp " + pzpState.sessionId + " connected to " + config.metaData.pzhId);
-        } else {
-            if (callback) callback (false, "pzh already connected");
+    function initializePzp() {
+        try {
+            PzpCommon.wUtil.webinosHostname.getHostName(inputConfig.sessionIdentity, function (hostname) {
+                inputConfig.sessionIdentity = hostname;
+                config = new PzpCommon.wUtil.webinosConfiguration("Pzp", inputConfig);// sets configuration
+                if(config.createOrLoadWebinosConfiguration()){
+                    checkMode();   //virgin or hub mode
+                    PzpObject.setSessionId();//sets pzp sessionId
+                    PzpObject.startWebSocketServer();
+                }
+                config.on("FUNC_ERROR", function(err, errMsg){
+                    PzpObject.emit("FUNC_ERROR", err, errMsg);
+                });
+                config.on("EXCEPTION", function(err, errMsg){
+                    PzpObject.emit("EXCEPTION", err, errMsg);
+                });
+                config.on("WRITE", function(err, errMsg){
+                    PzpObject.emit("WRITE", err, errMsg);
+                });
+                config.on("READ", function(err, errMsg){
+                    PzpObject.emit("READ", err, errMsg);
+                });
+                config.on("CLEANUP", function(err, errMsg){
+                    PzpObject.emit("CLEANUP", err, errMsg);
+                });
+            });
+        } catch (err) {
+            PzpObject.emit("EXCEPTION", "failed starting PZP", err);
         }
-    };
-
-    /**
-     * @param conn - Socket connection object of the PZH
-     */
-    this.unAuthentication = function(conn) {
-        logger.error("not authenticated " + conn.authorizationError);
-        conn.socket.end();
-        if (conn.authorizationError === 'CERT_NOT_YET_VALID') {
-            throw "possible clock difference between PZH and your PZP, try updating time and try again";
-        } else {
-            throw conn.authorizationError;
-        }
-    };
-    this.getKeyHash = function() {
-        config.getKeyHash();
-    };
-    this.getServiceCache = function() {
-        return config.serviceCache;
-    };
-    this.getWebinosPath = function() {
-        return config.metaData && config.metaData.webinosRoot ;
-    };
-    this.getCertificateToBeSignedByPzh = function() {
-        return config.cert.internal.master.csr;
-    };
-    PzpObject.config.on("FUNC_ERROR", function(err, errMsg){
-        PzpObject.emit("FUNC_ERROR", err, errMsg);
-    });
-    PzpObject.config.on("FUNC_ERROR", function(err, errMsg){
-        PzpObject.emit("FUNC_ERROR", err, errMsg);
-    });
-
+    }
     PzpObject.on("FUNC_ERROR", function(err, errMsg){
         console.log("FUNC_ERROR");
         console.log(err);
@@ -581,6 +632,8 @@ function Pzp() {
         console.log("EXCEPTION");
         console.log(err);
         console.log(errMsg);
+        var error = new Error ();
+        console.log( error.stack);
     });
     PzpObject.on("WRITE", function(err, errMsg){
         console.log("WRITE");
@@ -599,15 +652,37 @@ function Pzp() {
         console.log(errMsg);
 
     });
-};
+    PzpObject.on("WSS_Started", function(){
+        PzpObject.initializeRPC_Message(); // Initializes RPC & load default module
+        if (PzpObject.getEnrolledStatus()) {
+            PzpObject.connectHub();
+        } else {
+            PzpObject.setupMessage_RPCHandler ();
+            logger.log("Pzp is in virgin mode and successfully started pzp WebSocket server");
+            PzpObject.emit("PZP_STARTED");
+        }
+    });
+    process.on("exit", function(){
+
+    });
+    initializePzp();
+}
+
 require("util").inherits(Pzp, PzpWebSocket);
 Pzp.prototype.__proto__ = require("events").EventEmitter.prototype;
-
 var PzpAPI = exports;
-var pzpInstance = undefined;
+PzpAPI.setInputConfig = function(inputConfig) {
+    PzpAPI.inputConfig = inputConfig;
+};
 PzpAPI.getInstance = function() {
-    if (!pzpInstance) pzpInstance = new Pzp();
-    return pzpInstance;
+    if (!PzpAPI.inputConfig) {
+        console.log("Missing inputConfig parameters");
+        return null;
+    }
+    if (!PzpAPI.pzpInstance) {
+        PzpAPI.pzpInstance = new Pzp(PzpAPI.inputConfig);
+    }
+    return PzpAPI.pzpInstance;
 };
 
 PzpAPI.getSessionId = function() {

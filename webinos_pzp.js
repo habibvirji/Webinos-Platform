@@ -117,15 +117,15 @@ function initializeWidgetServer () {
 }
 
 function initializePzp (config) {
-   Pzp.session.getInstance().initializePzp(config, function (status, result) {
-        testStart(status);
-        if (status) {
-            if (argv.widgetServer)
-                initializeWidgetServer ();
-        } else {
-            console.log ("unsuccessful in starting PZP" + result);
-        }
-    });
+   Pzp.session.setInputConfig(config);
+   var pzpInstance = Pzp.session.getInstance();
+   pzpInstance.on("PZP_STARTED", function(){
+       testStart(true);
+       if (argv.widgetServer) initializeWidgetServer ();
+   });
+   pzpInstance.on("PZP_FAILED", function(){
+      testStart(false);
+   });
 }
 
 /* This function is only relevant when the --test switch is passed to

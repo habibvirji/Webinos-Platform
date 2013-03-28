@@ -163,7 +163,7 @@ var PzpOtherManager = function () {
      * @param modules : webinos modules that should be loaded in the PZP
      */
     this.initializeRPC_Message = function () {
-        registry = new PzpCommon.rpc.Registry (this);
+        registry = new PzpCommon.rpc.Registry(PzpObject);
         rpcHandler = new PzpCommon.rpc.RPCHandler (PzpObject, registry); // Handler for remote method calls.
         discovery = new PzpCommon.discovery(rpcHandler, [registry]);
         registry.registerObject (discovery);

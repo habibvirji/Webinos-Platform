@@ -310,13 +310,15 @@ function PzpWebSocketServer(){
                 PzpObject.getPorts().pzp_webSocket = parseInt(PzpObject.getPorts().pzp_webSocket, 10) + 1;
                 logger.error ("address in use, now trying port " + PzpObject.getPorts().pzp_webSocket);
                 httpserver.listen(PzpObject.getPorts().pzp_webSocket);
+                PzpObject.emit("WSS_Started");
             } else {
                 return callback (false, err);
             }
         });
 
         httpserver.on ("listening", function () {
-            logger.log ("httpServer listening at port " + PzpObject.getPorts().pzp_webSocket + " and hostname localhost");
+            logger.log("httpServer listening at port " + PzpObject.getPorts().pzp_webSocket + " and hostname localhost");
+            PzpObject.emit("WSS_Started");
             return callback (true, httpserver);
         });
         httpserver.listen (PzpObject.getPorts().pzp_webSocket, "0.0.0.0");
@@ -387,7 +389,7 @@ function PzpWebSocketServer(){
         }
     };
 
-    this.startWebSocketServer = function (_callback) {
+    this.startWebSocketServer = function() {
         startHttpServer (function (status, value) {
             if (status) {
                 if (wrtServer) {
@@ -412,12 +414,10 @@ function PzpWebSocketServer(){
                         logger.error ("Failed to accept websocket connection: " + "wrong host or origin");
                     }
                 });
-                return _callback (true);
-            } else {
-                return _callback (false, err);
             }
         });
     };
+
 
     this.sendConnectedApp = function (address, message) {
         if (address && message) {
@@ -456,6 +456,12 @@ function PzpWebSocketServer(){
                 PzpObject.sendConnectedApp (key, msg);
             }
         }
+    };
+    /**
+     *
+     */
+    this.startWSS = function() {
+        startWebSocketServer();
     };
 }
 

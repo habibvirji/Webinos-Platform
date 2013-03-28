@@ -28,15 +28,15 @@ var Certificate = function(webinosMetaData, userData) {
     CertContext.keyStore = new KeyStore(webinosMetaData.webinosType, webinosMetaData.webinosRoot);
     /**
      * Helper function to return certificateManager object
-     * @param {Function} callback - true if certificate loaded else false
      */
-    function getCertificateManager(callback) {
+    function getCertificateManager() {
         try {
             if(!certificateManager)
                 certificateManager = require ("certificate_manager");
-            callback(true, certificateManager);
+            return certificateManager;
         } catch (err) {
-            CertContext.on("MODULE_MISSING", "Certificate Manager is missing", err);
+            CertContext.on("MODULE_MISSING", new Error("Certificate Manager is missing"), err);
+            return null;
         }
     }
 
@@ -107,64 +107,61 @@ var Certificate = function(webinosMetaData, userData) {
             if (cn.length > 40) {
                 cn = cn.substring (0, 40);
             }
-            getCertificateManager(function(status, certificateManager) {
-                if (status) {
-                    CertContext.keyStore.generateStoreKey(type, key_id, function (status, privateKey) {
-                        if (status) {
-                            logger.log (type + " created private key (certificate generation I step)");
-                            try {
-                                obj.csr = certificateManager.createCertificateRequest (privateKey,
-                                    encodeURIComponent (userData.country),
-                                    encodeURIComponent (userData.state), // state
-                                    encodeURIComponent (userData.city), //city
-                                    encodeURIComponent (userData.orgname), //orgname
-                                    encodeURIComponent (userData.orgunit), //orgunit
-                                    cn,
-                                    encodeURIComponent (userData.email));
-                                if (!obj.csr) throw "userData is empty or incorrect";
-                            } catch (err) {
-                                CertContext.emit("FUNC_ERROR", "failed generating CSR. user details are missing", err);
-                                return;
-                            }
+            var certificateManager = getCertificateManager(), privateKey;
+            if(certificateManager){
+                if((privateKey = CertContext.keyStore.generateStoreKey(type, key_id))) {
+                    logger.log (type + " Created Private Key (certificate generation I step)");
+                    try {
+                        obj.csr = certificateManager.createCertificateRequest (privateKey,
+                            encodeURIComponent (userData.country),
+                            encodeURIComponent (userData.state), // state
+                            encodeURIComponent (userData.city), //city
+                            encodeURIComponent (userData.orgname), //orgname
+                            encodeURIComponent (userData.orgunit), //orgunit
+                            cn,
+                            encodeURIComponent (userData.email));
+                        if (!obj.csr) throw "userData is empty or incorrect";
+                    } catch (err) {
+                        CertContext.emit("FUNC_ERROR", "Failed Generating CSR. UserDetails are Missing", err);
+                        return;
+                    }
 
-                            try {
-                                logger.log (type + " generated CSR (certificate generation II step)");
-                                var serverName;
-                                if (require("net").isIP(webinosMetaData.serverName)) {
-                                    serverName = "IP:" + webinosMetaData.serverName;
-                                } else {
-                                    serverName = "DNS:" + webinosMetaData.serverName;
-                                }
-                                obj.cert = certificateManager.selfSignRequest (obj.csr, 3600, privateKey, cert_type, serverName);
-                            } catch (err1) {
-                                CertContext.emit("FUNC_ERROR", "failed self signing certificate", err1);
-                            }
-                            logger.log (type + " generated self signed certificate (certificate generation III step)");
-                            if (type === "PzhPCA" || type === "PzhCA" || type === "PzpCA") {
-                                CertContext.internal.master.cert = obj.cert;
-                                try {
-                                    obj.crl = certificateManager.createEmptyCRL (privateKey, obj.cert, 3600, 0);
-                                } catch (err2) {
-                                    CertContext.emit("FUNC_ERROR", "failed creating crl", err2);
-                                    return;
-                                }
-                                logger.log (type + " generated crl (certificate generation IV step)");
-                                CertContext.crl.value = obj.crl;
-                                if (type === "PzpCA") { CertContext.internal.master.csr = obj.csr;} // We need to get it signed by PZH during PZP enrollment
-                                return callback(true);
-                            } else if (type === "PzhP" || type === "Pzh" || type === "Pzp") {
-                                CertContext.internal.conn.cert = obj.cert;
-                                if (type === "Pzp") { CertContext.internal.conn.csr = obj.csr; }
-                                return callback (true, obj.csr);
-                            }  else if (type === "PzhWS" || type === "PzhSSL") {
-                                return callback (true, obj.csr);
-                            }
+                    try {
+                        logger.log (type + " generated CSR (certificate generation II step)");
+                        var serverName;
+                        if (require("net").isIP(webinosMetaData.serverName)) {
+                            serverName = "IP:" + webinosMetaData.serverName;
+                        } else {
+                            serverName = "DNS:" + webinosMetaData.serverName;
                         }
-                    });
-                } 
-            });
+                        obj.cert = certificateManager.selfSignRequest (obj.csr, 3600, privateKey, cert_type, serverName);
+                    } catch (err1) {
+                        CertContext.emit("FUNC_ERROR", "failed self signing certificate", err1);
+                    }
+                    logger.log (type + " Generated Self-Signed Certificate (certificate generation III step)");
+                    if (type === "PzhPCA" || type === "PzhCA" || type === "PzpCA") {
+                        CertContext.internal.master.cert = obj.cert;
+                        try {
+                            obj.crl = certificateManager.createEmptyCRL (privateKey, obj.cert, 3600, 0);
+                        } catch (err2) {
+                            CertContext.emit("FUNC_ERROR", "failed creating crl", err2);
+                            return;
+                        }
+                        logger.log (type + " Generated crl (certificate generation IV step)");
+                        CertContext.crl.value = obj.crl;
+                        if (type === "PzpCA") { CertContext.internal.master.csr = obj.csr;} // We need to get it signed by PZH during PZP enrollment
+                        return true;
+                    } else if (type === "PzhP" || type === "Pzh" || type === "Pzp") {
+                        CertContext.internal.conn.cert = obj.cert;
+                        if (type === "Pzp") { CertContext.internal.conn.csr = obj.csr; }
+                        return obj.csr;
+                    }  else if (type === "PzhWS" || type === "PzhSSL") {
+                        return obj.csr;
+                    }
+                }
+            }
         } catch (err) {
-            CertContext.emit("EXCEPTION", "FAILED Creating Certificates", err);
+            CertContext.emit("EXCEPTION", "Failed Creating Certificates", err);
         }
     };
 
@@ -174,39 +171,32 @@ var Certificate = function(webinosMetaData, userData) {
      * - PZH Provider uses this to sign web server certificates
      * @public
      * @param {String} csr - Certificate that needs to be signed by the server
-     * @param {Function} callback - if certificate has been signed successfully then return true and signed certificate
-     * else return false
      */
-    this.generateSignedCertificate = function (csr, callback) {
+    this.generateSignedCertificate = function (csr) {
         try {
-            getCertificateManager(function(status, certificateManager){
-                if (status) {
-                    CertContext.keyStore.fetchKey(CertContext.internal.master.key_id, function (status, privateKey) {
-                        if (status) {
-                            var server,  clientCert;
-                            if (require ("net").isIP (webinosMetaData.serverName)) {
-                                server = "IP:" + webinosMetaData.serverName;
-                            } else {
-                                server = "DNS:" + webinosMetaData.serverName;
-                            }
-                            try {
-                                clientCert = certificateManager.signRequest (csr, 3600, privateKey,
-                                    CertContext.internal.master.cert, certificateType.CLIENT, server);
-                            } catch (err) {
-                                CertContext.emit("FUNC_ERROR", "failed signing client certificate", err);
-                                return;
-                            }
+            var certificateManager, privateKey;
+            if((certificateManager = getCertificateManager())) {
+                if((privateKey = CertContext.keyStore.fetchKey(CertContext.internal.master.key_id))){
+                    var server,  clientCert;
+                    server = (require ("net").isIP(webinosMetaData.serverName))? "IP:" : "DNS";
+                    server += webinosMetaData.serverName;
+                    try {
+                        clientCert = certificateManager.signRequest (csr, 3600, privateKey,
+                            CertContext.internal.master.cert, certificateType.CLIENT, server);
+                    } catch (err) {
+                        CertContext.emit("FUNC_ERROR", "failed signing client certificate", err);
+                        return undefined;
+                    }
 
-                            if(clientCert) {
-                                logger.log ("signed certificate by the PZP/PZH");
-                                callback (true, clientCert);
-                            }
-                        } 
-                    });
+                    if(clientCert) {
+                        logger.log ("Signed Certificate by the PZP/PZH");
+                        return clientCert;
+                    }
                 }
-            });
+            }
         } catch (err) {
-            CertContext.emit("EXCEPTION", "signing error", err);                
+            CertContext.emit("EXCEPTION", "Signing Certificate Generated Error", err);
+            return undefined;
         }
     };
 
@@ -218,46 +208,40 @@ var Certificate = function(webinosMetaData, userData) {
     */
     this.getKeyHash = function(certPath, callback){
         try {
-            getCertificateManager(function(status, certificateManager){
-                if (status) {
-                    var hash = certificateManager.getHash(certPath);
-                    logger.log("Key Hash is" + hash);
-                    callback(true, hash);
-                } 
-            });
+            var certificateManager;
+            if((certificateManager = getCertificateManager())){
+                var hash = certificateManager.getHash(certPath);
+                logger.log("Key Hash is" + hash);
+                return hash;
+            }
         } catch (err) {
-            CertContext.emit("EXCEPTION", "getKey hash failed", err);         
+            CertContext.emit("EXCEPTION", "GetKey Hash Failed", err);
+            return undefined;
         }
     };
 
     /**
      * Revokes a PZP certificate. Revoke functionality is intended to be run only by a Server
      * @param {String} pzpCert - PEM formatted string that needs to be revoked
-     * @param {Function} callback - true if revoke was successful else false
      */
-    this.revokeClientCert = function (pzpCert, callback) {
+    this.revokeClientCert = function (pzpCert) {
         try {
-            getCertificateManager(function(status, certificateManager){
-                if(status) {
-                    var crl;
-                    CertContext.keyStore.fetchKey(CertContext.internal.master.key_id, function (status, value) {
-                        if (status) {
-                            try {
-                                crl = certificateManager.addToCRL ("" + value, "" + CertContext.crl.value, "" + pzpCert); // master.key.value, master.cert.value
-                            } catch(err){
-                                CertContext.emit("FUNC_ERROR", "certificate revoke failed", err);
-                                return;
-                            }
-                            if (crl) {
-                                logger.log("revoked certificate");
-                                callback (true, crl);
-                            }
-                        } 
-                    });
-                } 
-            });
+            var certificateManager, privateKey;
+            if((certificateManager =getCertificateManager())){
+                if ((privateKey=CertContext.keyStore.fetchKey(CertContext.internal.master.key_id))) {
+                    try {
+                        var crl = certificateManager.addToCRL ("" + value, "" + CertContext.crl.value, "" + pzpCert); // master.key.value, master.cert.value
+                        logger.log("revoked certificate");
+                        return crl;
+                    } catch(err){
+                        CertContext.emit("FUNC_ERROR", "certificate revoke failed", err);
+                        return undefined;
+                    }
+                }
+            }
         } catch (err) {
             CertContext.emit("EXCEPTION", "certificate revoke failed", err);
+            return undefined;
         }
     };
     CertContext.keyStore.on("READ", function(errMsg, err){

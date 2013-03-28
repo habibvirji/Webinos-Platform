@@ -9,7 +9,7 @@ var PzpConnectHub = function () {
     PzpOtherManager.call(this);
     var PzpCommon       = require("./pzp.js");
     var PzpObject = this;
-    var logger = PzpCommon.wUtil.webinosLogging (__filename) || console;
+    var logger = PzpCommon.wUtil.webinosLogging(__filename) || console;
 
     /**
      * If PZP fails to connect to PZH, this tries to connect back to PZH
@@ -17,9 +17,8 @@ var PzpConnectHub = function () {
     function retryConnecting () {
         if (PzpObject.getEnrolledStatus()) {
             setTimeout (function () {
-                PzpObject.connectHub(function (status) {
-                    logger.log ("retrying to connect back to the PZH " + (status ? "successful" : "failed"));
-                });
+                logger.log ("retrying to connect back to the PZH ");
+                PzpObject.connectHub();
             }, 60000);//increase time limit to suggest when it should retry connecting back to the PZH
         }
     }
@@ -27,7 +26,7 @@ var PzpConnectHub = function () {
      *
      * @param callback
      */
-    this.connectHub = function (callback) {
+    this.connectHub = function () {
         var pzpClient;
         try {
             PzpObject.setConnectionParameters(function (status, certificateConfiguration) {
@@ -36,10 +35,9 @@ var PzpConnectHub = function () {
                     certificateConfiguration, function() {
                     logger.log ("connection to pzh status: " + pzpClient.authorized);
                     if (pzpClient.authorized) {
-                        PzpObject.handlePzhAuthentication(pzpClient, callback);
+                        PzpObject.handlePzhAuthentication(pzpClient);
                     } else {
                         PzpObject.unAuthentication(pzpClient);
-                        callback(false);
                     }
                 });
                 pzpClient.setTimeout(100);
@@ -59,7 +57,7 @@ var PzpConnectHub = function () {
                 });
 
                 pzpClient.on ("error", function(err) {
-                    PzpObject.handlePzpError(err);
+                    PzpObject.emit("CONNECTION_FAILED", err);
                 });
             });
         } catch (err) {
